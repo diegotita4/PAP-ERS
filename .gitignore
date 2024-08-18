@@ -5,6 +5,9 @@
 
 # Ignore Virtual Environment
 env/
+venv/ 
+
+# pyhton -m venv env =) 
 
 # User-specific files
 *.rsuser
