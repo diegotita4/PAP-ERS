@@ -1,7 +1,5 @@
 # PAP-ERS
-
-readme_content = """
-# Project: Sector Rotation Strategy
+##  Project: Sector Rotation Strategy
 
 ## Objective
 Develop a strategy that helps predict economic cycles and implement a sector rotation investment strategy.
