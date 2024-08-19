@@ -1,5 +1,6 @@
 # PAP-ERS
-##  Project: Sector Rotation Strategy
+
+## Project: Sector Rotation Strategy
 
 ## Objective
 Develop a strategy that helps predict economic cycles and implement a sector rotation investment strategy.
@@ -43,3 +44,21 @@ To run this project, you need to set up a virtual environment and install the ne
 ### Step 1: Create a Virtual Environment
 ```bash
 python -m venv env
+```
+
+### Step 2: Activate the Virtual Environment
+- On Windows:
+```bash
+env\Scripts\activate
+```
+- On macOS and Linux:
+```bash
+source env/bin/activate
+```
+
+### Step 3: Install the Required Packages
+```bash
+pip install -r requirements.txt
+```
+
+You're now ready to run the project! =) 
