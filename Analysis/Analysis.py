@@ -4,22 +4,39 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from utils import FredIndicatorFetcher as FIF
+from utils import EDAAnalysis as EDA
+from utils import HistoricalDataDownloader as HDD
 
 
-api_key = '2df41cfada1473ef26fa8dede4c9bef5 '
-fetcher = FIF(api_key)
-data_tlei = fetcher.fetch_indicator('TLEI')
-data_cpi = fetcher.fetch_indicator('CPI')
-data_gdp = fetcher.fetch_indicator('GDP')
-data_cci = fetcher.fetch_indicator('CCI')
-data_cei = fetcher.fetch_indicator('CEI')
-fetcher.save_to_excel({'TLEI': data_tlei, 'CPI': data_cpi, 
-                       'GDP': data_gdp, 'CCI': data_cci,
-                       'CEI': data_cei}, 'economic_indicatorsv2.xlsx')
+# api_key = '2df41cfada1473ef26fa8dede4c9bef5 '
+# fetcher = FIF(api_key)
+# data_tlei = fetcher.fetch_indicator('TLEI')
+# data_cpi = fetcher.fetch_indicator('CPI')
+# data_gdp = fetcher.fetch_indicator('GDP')
+# data_cci = fetcher.fetch_indicator('CCI')
+# data_cei = fetcher.fetch_indicator('CEI')
+# fetcher.save_to_excel({'TLEI': data_tlei, 'CPI': data_cpi, 
+#                        'GDP': data_gdp, 'CCI': data_cci,
+#                        'CEI': data_cei}, 'economic_indicatorsv2.xlsx')
 
 
+# Instantiate the class with the correct file path and parameters
+EDA = EDA(
+    file_path="PAP-ERS/Data/economic_indicators_data.xlsx", 
+    date_column='Date',  # Assuming 'Date' is your date column
+    columns_to_analyze=['CLI', 'BCI', 'GDP', 'CCI'],  # The columns you want to analyze
+    sheet_name='data'  # Specify the correct sheet name if not 'Sheet1'
+)
 
+# Perform the EDA
+EDA.perform_eda()
 
+# Download historic index and companies of USA MARKET
+if __name__ == "__main__":
+    companies = ["AAPL", "MSFT", "GOOGL", "AMZN"]  # List of company tickers
+    downloader = HDD(companies)
+    downloader.download_data(start_date="2000-01-01")
+    downloader.save_data(filepath="PAP-ERS/Data/historical_data.xlsx")
 
 
 
@@ -37,7 +54,7 @@ fetcher.save_to_excel({'TLEI': data_tlei, 'CPI': data_cpi,
 
 
 # Load the Excel file
-file_path = 'PAP-ERS/Data/economic_indicators_data.xlsx'
+file_path = 'PAP-ERS/Data/economic_indicators_v2.xlsx'
 excel_data = pd.ExcelFile(file_path)
 
 # Display sheet names to understand the structure
