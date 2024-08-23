@@ -12,10 +12,11 @@ fred = Fred(api_key=api_key)
 
 # Define the FRED series IDs for the indicators
 indicators = {
-    #"CLI": "USARECDM",  # Proxy for CLI
-    #"BCI": "USABCI",  # Proxy for Business Confidence Indicator
-    "GDP": "GDP",  # Gross Domestic Product
-    "CCI": "CSCICP03USM665S"  # Consumer Confidence Index
+    "CLI": "USALOLITONOSTSAM",  # Composite Leading Indicators: Composite Leading Indicator (CLI) Normalized for United States (CLI)
+    "LEI":   "USSLIND", # Leading Economic Index for the United States (Monthly)
+    #"BCI": "USABCI",  # Proxy for Business Confidence Indicator (Monthly)
+    "GDP":  "USALORSGPNOSTSAM",  # Gross Domestic Product for United states (Monthly)
+    "CCI":  "CSCICP03USM665S"  # Consumer Confidence Index (Monthly)
 }
 # Specify the start date
 start_date = '1960-01-31'

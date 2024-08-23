@@ -1,12 +1,43 @@
 # The central code for PAP-II ! =) 
 # EDA FOR ECONOMIC INDICATORS. 
 # import libraries.....
-
 import pandas as pd
 import matplotlib.pyplot as plt
+from utils import FredIndicatorFetcher as FIF
+
+
+api_key = '2df41cfada1473ef26fa8dede4c9bef5 '
+fetcher = FIF(api_key)
+data_tlei = fetcher.fetch_indicator('TLEI')
+data_cpi = fetcher.fetch_indicator('CPI')
+data_gdp = fetcher.fetch_indicator('GDP')
+data_cci = fetcher.fetch_indicator('CCI')
+data_cei = fetcher.fetch_indicator('CEI')
+fetcher.save_to_excel({'TLEI': data_tlei, 'CPI': data_cpi, 
+                       'GDP': data_gdp, 'CCI': data_cci,
+                       'CEI': data_cei}, 'economic_indicatorsv2.xlsx')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Load the Excel file
-file_path = 'Data/economic_indicators_data.xlsx'
+file_path = 'PAP-ERS/Data/economic_indicators_data.xlsx'
 excel_data = pd.ExcelFile(file_path)
 
 # Display sheet names to understand the structure
@@ -76,3 +107,4 @@ plt.title('Correlation Matrix of Economic Indicators')
 plt.show()
 
 correlation_matrix
+
