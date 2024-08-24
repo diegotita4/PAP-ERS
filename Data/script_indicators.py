@@ -38,7 +38,7 @@ merged_data.index = pd.to_datetime(merged_data.index)
 merged_data = merged_data.resample('M').last()
 
 # Define the output file path
-output_file = "PAP-ERS/Data/economic_indicators_dataAPI's.xlsx"
+output_file = "Data/economic_indicators_dataAPI's.xlsx"
 
 # Export to Excel
 merged_data.to_excel(output_file, sheet_name='data')
