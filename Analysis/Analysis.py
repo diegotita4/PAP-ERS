@@ -13,18 +13,100 @@
 
 # LIBRARIES
 import pandas as pd
-import matplotlib.pyplot as plt
-from utils import SP500ComparisonEDA
-from utils import EDAAnalysis as EDA
-from utils import FredIndicatorFetcher as FIF
+from utils import EDA_comparison
+from utils import EDA
 from utils import HistoricalDataDownloader as HDD
 
 # --------------------------------------------------
 
-# Download historic index and companies of USA MARKET
-if __name__ == "__main__":
-    #companies = ['^GSPC']
-    companies = a = ['^GSPC', 'A', 'AAL', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE',
+# 
+HDD_sp500 = HDD(
+    tickers=['^GSPC'],
+    start_date="2000-01-01")
+HDD_sp500.download_data()
+HDD_sp500.save_data(filepath="Data/sp500_data.xlsx")
+
+# ------------------------------
+
+# 
+economic_indicators_data = pd.read_excel("Data/economic_indicators_data.xlsx", sheet_name="data")
+sp500_data = pd.read_excel("Data/sp500_data.xlsx", sheet_name="data")
+
+# --------------------------------------------------
+
+# 
+EDA_economic_indicators = EDA(
+    file_path="Data/economic_indicators_data.xlsx", 
+    date_column='Date',
+    columns_to_analyze=['CLI', 'BCI', 'GDP', 'CCI'],
+    sheet_name='data'
+)
+
+# ------------------------------
+
+# 
+EDA_economic_indicators.perform_EDA()
+
+# --------------------------------------------------
+
+# 
+EDA_sp500 = EDA(
+    file_path="Data/sp500_data.xlsx", 
+    date_column='Date',
+    columns_to_analyze=['^GSPC CLOSE'],
+    sheet_name='data'
+)
+
+# ------------------------------
+
+# 
+EDA_sp500.perform_EDA()
+
+# --------------------------------------------------
+
+# 
+EDA_comparison_economic_indicators_sp500 = EDA_comparison(
+    sp500_data=sp500_data,
+    economic_indicators_data=economic_indicators_data
+)
+
+# ------------------------------
+
+# 
+EDA_comparison_economic_indicators_sp500.perform_EDA_comparison()
+
+
+
+
+
+
+
+
+
+
+# --------------------------------------------------
+
+# EXTRA
+
+# from utils import FredIndicatorFetcher as FIF
+# api_key = '2df41cfada1473ef26fa8dede4c9bef5 '
+# fetcher = FIF(api_key)
+# data_tlei = fetcher.fetch_indicator('TLEI')
+# data_cpi = fetcher.fetch_indicator('CPI')
+# data_gdp = fetcher.fetch_indicator('GDP')
+# data_cci = fetcher.fetch_indicator('CCI')
+# data_cei = fetcher.fetch_indicator('CEI')
+# fetcher.save_to_excel({'TLEI': data_tlei,
+#                        'CPI': data_cpi, 
+#                        'GDP': data_gdp,
+#                        'CCI': data_cci,
+#                        'CEI': data_cei}, 'economic_indicatorsv2.xlsx')
+
+# --------------------------------------------------
+
+# NOTAS
+
+a = ['^GSPC', 'A', 'AAL', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE',
      'ADI', 'ADM', 'ADP', 'ADSK', 'AEE', 'AEP', 'AES', 'AFL', 'AIG', 'AIZ',
      'AJG', 'AKAM', 'ALB', 'ALGN', 'ALL', 'ALLE', 'AMAT', 'AMCR', 'AMD', 'AME',
      'AMGN', 'AMP', 'AMT', 'AMZN', 'ANET', 'ANSS', 'AON', 'AOS', 'APA', 'APD',
@@ -76,53 +158,3 @@ if __name__ == "__main__":
      'VTRS', 'VZ', 'WAB', 'WAT', 'WBA', 'WBD', 'WDAY', 'WDC', 'WEC', 'WELL',
      'WFC', 'WM', 'WMB', 'WMT', 'WRB', 'WST', 'WTW', 'WY', 'WYNN', 'XEL',
      'XOM', 'XYL', 'YUM', 'ZBH', 'ZBRA', 'ZS', 'ZTS']
-    downloader = HDD(companies)
-    downloader.download_data(start_date="2000-01-01")
-    downloader.save_data(filepath="Data/historical_data.xlsx")
-
-# --------------------------------------------------
-
-# Instantiate the class with the correct file path and parameters
-EDA = EDA(
-    file_path="Data/economic_indicators_data.xlsx", 
-    date_column='Date',
-    columns_to_analyze=['CLI', 'BCI', 'GDP', 'CCI'],
-    sheet_name='data'
-)
-
-EDA.perform_eda()
-
-# --------------------------------------------------
-
-# Load the data (you probably already have this in your code)
-economic_df = pd.read_excel("Data/economic_indicators_data.xlsx", sheet_name="data")
-historical_df = pd.read_excel("Data/historical_data.xlsx", sheet_name="Historical Data")
-
-# --------------------------------------------------
-
-# Instantiate the comparison and EDA class
-comparator_eda = SP500ComparisonEDA(sp500_data=historical_df, indicators_data=economic_df)
-
-# Plot comparison of indicators vs S&P 500
-comparator_eda.plot_comparison()
-
-# Plot histograms of indicators vs S&P 500
-comparator_eda.plot_histograms()
-
-# Plot boxplots of indicators vs S&P 500
-comparator_eda.plot_boxplots()
-
-# --------------------------------------------------
-
-# EXTRA
-
-# api_key = '2df41cfada1473ef26fa8dede4c9bef5 '
-# fetcher = FIF(api_key)
-# data_tlei = fetcher.fetch_indicator('TLEI')
-# data_cpi = fetcher.fetch_indicator('CPI')
-# data_gdp = fetcher.fetch_indicator('GDP')
-# data_cci = fetcher.fetch_indicator('CCI')
-# data_cei = fetcher.fetch_indicator('CEI')
-# fetcher.save_to_excel({'TLEI': data_tlei, 'CPI': data_cpi, 
-#                        'GDP': data_gdp, 'CCI': data_cci,
-#                        'CEI': data_cei}, 'economic_indicatorsv2.xlsx')
