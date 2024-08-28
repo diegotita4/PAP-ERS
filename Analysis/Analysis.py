@@ -14,7 +14,6 @@
 # LIBRARIES
 import pandas as pd
 from utils import EDA_comparison
-from utils import EDA
 from utils import HistoricalDataDownloader as HDD
 
 # --------------------------------------------------
@@ -29,38 +28,8 @@ HDD_sp500.save_data(filepath="Data/sp500_data.xlsx")
 # ------------------------------
 
 # 
-economic_indicators_data = pd.read_excel("Data/economic_indicators_data.xlsx", sheet_name="data")
-sp500_data = pd.read_excel("Data/sp500_data.xlsx", sheet_name="data")
-
-# --------------------------------------------------
-
-# 
-EDA_economic_indicators = EDA(
-    file_path="Data/economic_indicators_data.xlsx", 
-    date_column='Date',
-    columns_to_analyze=['CLI', 'BCI', 'GDP', 'CCI'],
-    sheet_name='data'
-)
-
-# ------------------------------
-
-# 
-EDA_economic_indicators.perform_EDA()
-
-# --------------------------------------------------
-
-# 
-EDA_sp500 = EDA(
-    file_path="Data/sp500_data.xlsx", 
-    date_column='Date',
-    columns_to_analyze=['^GSPC CLOSE'],
-    sheet_name='data'
-)
-
-# ------------------------------
-
-# 
-EDA_sp500.perform_EDA()
+economic_indicators_data = pd.read_excel("Data/economic_indicators_data.xlsx")
+sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 
 # --------------------------------------------------
 

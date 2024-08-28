@@ -13,160 +13,102 @@
 
 # LIBRARIES
 import os
+import numpy as np
 import pandas as pd
 import seaborn as sns
 import yfinance as yf
 import matplotlib.pyplot as plt
+from scipy import stats
 from fredapi import Fred
 from datetime import datetime
 
-# --------------------------------------------------
+# ------------------------------
 
-# 
-class EDA:
-
-    def __init__(self, file_path, date_column=None, columns_to_analyze=None, sheet_name='Sheet1'):
-
-        self.file_path = file_path
-        self.sheet_name = sheet_name
-        self.date_column = date_column
-        self.columns_to_analyze = columns_to_analyze
-        self.data_df = None
-        self.summary_stats = None
-        self.missing_values = None
-        self.correlation_matrix = None
-
-    # ------------------------------
-
-    def data_load(self):
-
-        excel_data = pd.ExcelFile(self.file_path)
-        self.data_df = pd.read_excel(excel_data, sheet_name=self.sheet_name)
-
-        if self.date_column in self.data_df.columns:
-            self.data_df[self.date_column] = pd.to_datetime(self.data_df[self.date_column])
-            self.data_df.set_index(self.date_column, inplace=True)
-
-        if self.columns_to_analyze:
-            self.data_df = self.data_df[self.columns_to_analyze]
-
-    # ------------------------------
-
-    def data_summary(self):
-
-        print("First few rows of the data:")
-        print(self.data_df.head())
-
-        print("\nSummary statistics:")
-        print(self.data_df.describe())
-
-        print("\nMissing values:")
-        print(self.data_df.isnull().sum())
-
-    # ------------------------------
-
-    def data_statistics(self):
-
-        print("\nMean of each column:")
-        print(self.data_df.mean())
-
-        print("\nMedian of each column:")
-        print(self.data_df.median())
-
-        print("\nMode of each column:")
-        print(self.data_df.mode().iloc[0])
-
-        print("\nVariance of each column:")
-        print(self.data_df.var())
-
-    # ------------------------------
-
-    def plot_performance(self):
-
-        plt.figure(figsize=(14, 8))
-        plt.plot(self.data_df.index, self.data_df[self.columns_to_analyze], label=self.columns_to_analyze)
-        plt.title('Performance')
-        plt.xlabel('Date')
-        plt.ylabel('Value')
-        plt.legend(loc='best')
-        plt.show()
-
-    # ------------------------------
-
-    def plot_correlation_matrix(self):
-
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(self.data_df.corr(), annot=True, cmap='coolwarm', fmt='.2f')
-        plt.title('Correlation Matrix')
-        plt.show()
-
-    # ------------------------------
-
-    def plot_histogram(self):
-
-        self.data_df.hist(figsize=(14, 10), bins=20, color='teal', edgecolor='black')
-        plt.suptitle('Histogram(s)')
-        plt.show()
-
-    # ------------------------------
-
-    def plot_boxplot(self):
-
-        plt.figure(figsize=(14, 10))
-        sns.boxplot(data=self.data_df, palette='Set2')
-        plt.title('Boxplot(s)')
-        plt.show()
-
-    # ------------------------------
-
-    def perform_EDA(self):
-
-        self.data_load()
-        self.data_summary()
-        self.data_statistics()
-        self.plot_performance()
-        self.plot_histogram()
-        self.plot_boxplot()
-
-        if len(self.columns_to_analyze) > 1:
-            try:
-                self.plot_correlation_matrix()
-
-            except:
-                pass
+sns.set(style="whitegrid")
+plt.rcParams['figure.figsize'] = (10, 6)
 
 # --------------------------------------------------
 
 # 
 class EDA_comparison:
 
-    def __init__(self, sp500_data, economic_indicators_data, date_column='Date'):
-
+    def __init__(self, sp500_data, economic_indicators_data, date_column='Date', columns_to_analyze=None):
         self.sp500_data = sp500_data
         self.economic_indicators_data = economic_indicators_data
         self.date_column = date_column
-        self.sp500_data[self.date_column] = pd.to_datetime(self.sp500_data[self.date_column])
-        self.economic_indicators_data[self.date_column] = pd.to_datetime(self.economic_indicators_data[self.date_column])
-        self.merged_data = pd.merge(self.sp500_data, self.economic_indicators_data, on=self.date_column, how='inner')
+        self.columns_to_analyze = columns_to_analyze
+
+        if self.date_column in self.sp500_data.columns:
+            self.sp500_data[self.date_column] = pd.to_datetime(self.sp500_data[self.date_column])
+            self.sp500_data.set_index(self.date_column, inplace=True)
+
+        if self.date_column in self.economic_indicators_data.columns:
+            self.economic_indicators_data[self.date_column] = pd.to_datetime(self.economic_indicators_data[self.date_column])
+            self.economic_indicators_data.set_index(self.date_column, inplace=True)
+
+        self.sp500_data['Daily Return'] = self.sp500_data['^GSPC CLOSE'].pct_change()
+
+        if self.columns_to_analyze:
+            self.sp500_data = self.sp500_data[self.columns_to_analyze]
+            self.economic_indicators_data = self.economic_indicators_data[self.columns_to_analyze]
+
+        self.merged_data = pd.merge(self.sp500_data, self.economic_indicators_data, left_index=True, right_index=True, how='inner')
 
     # ------------------------------
 
-    def plot_performance(self, sp500_column='^GSPC CLOSE', indicators_columns=None):
+    def data_summary(self):
+        print("First few rows of the data:")
+        print(self.merged_data.head())
 
+        print("\nInformation:")
+        print(self.merged_data.info())
+
+        print("\nSummary statistics:")
+        print(self.merged_data.describe())
+
+        print("\nMissing values:")
+        print(self.merged_data.isnull().sum())
+
+        print("\nOutliers")
+        print(np.where(np.abs(stats.zscore(self.merged_data)) > 3))
+
+    # ------------------------------
+
+    def data_statistics(self):
+        numeric_data = self.merged_data.select_dtypes(include=[np.number])
+
+        print("\nMean of each column:")
+        print(numeric_data.mean())
+
+        print("\nMedian of each column:")
+        print(numeric_data.median())
+
+        print("\nMode of each column:")
+        print(numeric_data.mode().iloc[0])
+
+        print("\nVariance of each column:")
+        print(numeric_data.var())
+
+        print("\nStandard deviation of each column:")
+        print(numeric_data.std())
+
+    # ------------------------------
+
+    def plot_performance(self, sp500_column='Daily Return', indicators_columns=None):
         if indicators_columns is None:
-            indicators_columns = self.economic_indicators_data.columns.drop(self.date_column).tolist()
+            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
         for indicator in indicators_columns:
-            ax1.plot(self.merged_data[self.date_column], self.merged_data[indicator], label=indicator)
+            ax1.plot(self.merged_data.index, self.merged_data[indicator], label=indicator)
 
         ax1.set_title('Economic Indicators Performance')
         ax1.set_xlabel('Date')
         ax1.set_ylabel('Value')
         ax1.legend(loc='best')
 
-        ax2.plot(self.merged_data[self.date_column], self.merged_data[sp500_column], label=sp500_column, color='black')
+        ax2.plot(self.merged_data.index, self.merged_data[sp500_column], label=sp500_column, color='black')
         ax2.set_title('S&P 500 Performance')
         ax2.set_xlabel('Date')
         ax2.set_ylabel('Value')
@@ -177,10 +119,9 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_histograms(self, sp500_column='^GSPC CLOSE', indicators_columns=None):
-
+    def plot_histograms(self, sp500_column='Daily Return', indicators_columns=None):
         if indicators_columns is None:
-            indicators_columns = self.economic_indicators_data.columns.drop(self.date_column).tolist()
+            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
@@ -197,10 +138,9 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_boxplots(self, sp500_column='^GSPC CLOSE', indicators_columns=None):
-
+    def plot_boxplots(self, sp500_column='Daily Return', indicators_columns=None):
         if indicators_columns is None:
-            indicators_columns = self.economic_indicators_data.columns.drop(self.date_column).tolist()
+            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
@@ -214,12 +154,27 @@ class EDA_comparison:
 
         plt.tight_layout()
         plt.show()
-    
-    def perform_EDA_comparison(self):
 
+    # ------------------------------
+
+    def plot_correlation_matrix(self, sp500_column='Daily Return', indicators_columns=None):
+        if indicators_columns is None:
+            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+
+        plt.figure(figsize=(12, 8))
+        sns.heatmap(self.merged_data[indicators_columns].corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+        plt.title('Economic Indicators Correlation Matrix')
+        plt.show()
+
+    # ------------------------------
+
+    def perform_EDA_comparison(self):
+        self.data_summary()
+        self.data_statistics()
         self.plot_performance()
         self.plot_histograms()
         self.plot_boxplots()
+        self.plot_correlation_matrix()
 
 # --------------------------------------------------
 
