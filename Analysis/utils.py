@@ -19,11 +19,10 @@ import seaborn as sns
 import yfinance as yf
 import matplotlib.pyplot as plt
 from scipy import stats
-from fredapi import Fred
-from datetime import datetime
 
 # ------------------------------
 
+# 
 sns.set(style="whitegrid")
 plt.rcParams['figure.figsize'] = (10, 6)
 
@@ -61,7 +60,7 @@ class EDA_comparison:
 
     def data_summary(self):
         print("First few rows of the data:")
-        print(self.merged_data.head(60))
+        print(self.merged_data.head(10))
 
         print("\nInformation:")
         print(self.merged_data.info())
@@ -100,33 +99,7 @@ class EDA_comparison:
     def plot_performance(self, sp500_column='Return (SMA 3)', indicators_columns=None):
 
         if indicators_columns is None:
-            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
-
-        for indicator in indicators_columns:
-            ax1.plot(self.merged_data.index, self.merged_data[indicator], label=indicator)
-
-        ax1.set_title('Economic Indicators Performance')
-        ax1.set_xlabel('Date')
-        ax1.set_ylabel('Value')
-        ax1.legend(loc='best')
-
-        ax2.plot(self.merged_data.index, self.merged_data[sp500_column], label=sp500_column, color='black')
-        ax2.set_title('S&P 500 Performance')
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Value')
-        ax2.legend(loc='best')
-
-        plt.tight_layout()
-        plt.show()
-
-    # ----------
-
-    def plot_performance(self, sp500_column='Return (SMA 3)', indicators_columns=None):
-
-        if indicators_columns is None:
-            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
+            indicators_columns = self.economic_indicators_data.columns.tolist()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
@@ -137,7 +110,7 @@ class EDA_comparison:
         ax1.set_xlabel('Date')
         ax1.set_ylabel('Value')
         ax1.legend(loc='best')
-        ax1.set_ylim([90, 105])
+        ax1.set_ylim([85, 110])
         ax1.axhline(y=100, color='red', linestyle='--', linewidth=2)
 
         ax2.plot(self.merged_data.index, self.merged_data[sp500_column], label=sp500_column, color='black')
@@ -145,7 +118,7 @@ class EDA_comparison:
         ax2.set_xlabel('Date')
         ax2.set_ylabel('Value')
         ax2.legend(loc='best')
-        ax2.set_ylim([90, 105])
+        ax2.set_ylim([85, 110])
         ax2.axhline(y=100, color='red', linestyle='--', linewidth=2)
 
         plt.tight_layout()
@@ -156,27 +129,7 @@ class EDA_comparison:
     def plot_histograms(self, sp500_column='Return (SMA 3)', indicators_columns=None):
 
         if indicators_columns is None:
-            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
-
-        for indicator in indicators_columns:
-            ax1.hist(self.merged_data[indicator].dropna(), bins=30, alpha=0.5, label=indicator)
-
-        ax1.set_title('Economic Indicators Histograms')
-
-        ax2.hist(self.merged_data[sp500_column].dropna(), bins=30, color='purple', alpha=0.5, label=sp500_column)
-        ax2.set_title('S&P 500 Histogram')
-
-        plt.tight_layout()
-        plt.show()
-
-    # ----------
-
-    def plot_histograms(self, sp500_column='Return (SMA 3)', indicators_columns=None):
-
-        if indicators_columns is None:
-            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
+            indicators_columns = self.economic_indicators_data.columns.tolist()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
@@ -184,13 +137,13 @@ class EDA_comparison:
             ax1.hist(self.merged_data[indicator].dropna(), bins=30, alpha=0.5, label=indicator)
 
         ax1.axvline(x=100, color='red', linestyle='--', linewidth=2)
-        ax1.set_xlim([90, 105])
+        ax1.set_xlim([85, 110])
         ax1.set_title('Economic Indicators Histograms')
 
         ax2.hist(self.merged_data[sp500_column].dropna(), bins=30, color='purple', alpha=0.5, label=sp500_column)
 
         ax2.axvline(x=100, color='red', linestyle='--', linewidth=2)
-        ax2.set_xlim([90, 105])
+        ax2.set_xlim([85, 110])
         ax2.set_title('S&P 500 Histogram')
 
         plt.tight_layout()
@@ -201,7 +154,7 @@ class EDA_comparison:
     def plot_boxplots(self, sp500_column='Return (SMA 3)', indicators_columns=None):
 
         if indicators_columns is None:
-            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
+            indicators_columns = self.economic_indicators_data.columns.tolist()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
@@ -221,7 +174,7 @@ class EDA_comparison:
     def plot_correlation_matrix(self, indicators_columns=None):
 
         if indicators_columns is None:
-            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
+            indicators_columns = self.economic_indicators_data.columns.tolist()
 
         plt.figure(figsize=(12, 8))
         sns.heatmap(self.merged_data[indicators_columns].corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
@@ -231,15 +184,16 @@ class EDA_comparison:
      # ------------------------------
 
     def plot_pairplot(self, indicators_columns=None):
+
         if indicators_columns is None:
             indicators_columns = self.economic_indicators_data.columns.tolist()
         
         data_to_plot = self.economic_indicators_data[indicators_columns].dropna()
-        
+
         if data_to_plot.empty:
             print("No data available for pairplot.")
             return
-        
+
         sns.pairplot(data_to_plot)
         plt.suptitle('Relaciones entre Indicadores Económicos', y=1.02)
         plt.show()
@@ -297,62 +251,3 @@ class HistoricalDataDownloader:
         os.makedirs(directory, exist_ok=True)
         self.data.to_excel(filepath, index=False, sheet_name="data")
         print(f"Data saved to {filepath}")
-
-
-
-
-
-
-
-
-
-
-# --------------------------------------------------
-
-# EXTRA
-class FredIndicatorFetcher:
-
-    def __init__(self, api_key):
-
-        self.api_key = api_key
-        self.fred = Fred(api_key=self.api_key)
-        self.indicators = {
-            "TLEI": "M16005USM358SNBR",
-            "CPI": "CPIAUCSL",
-            "GDP": "USALORSGPNOSTSAM",
-            "CCI": "CSCICP03USM665S",
-            "CEI": "USPHCI"
-        }
-
-    # ------------------------------
-
-    def fetch_indicator(self, indicator_key, start_date='1960-01-31', end_date=None):
-
-        if indicator_key not in self.indicators:
-            raise ValueError(f"Indicator '{indicator_key}' not found in the predefined indicators list.")
-        
-        end_date = end_date if end_date else datetime.today().strftime('%Y-%m-%d')
-        series_id = self.indicators[indicator_key]
-        data = self.fred.get_series(series_id, start_date, end_date)
-        return data
-
-    # ------------------------------
-
-    def save_to_excel(self, data_dict, file_name):
-
-        save_directory = 'PAP-ERS/Data/'
-        os.makedirs(save_directory, exist_ok=True)
-        file_path = os.path.join(save_directory, file_name)
-        combined_df = pd.DataFrame()
-
-        for indicator, data in data_dict.items():
-            df = pd.DataFrame(data, columns=[indicator])
-
-            if combined_df.empty:
-                combined_df = df
-
-            else:
-                combined_df = combined_df.join(df, how='outer')
-        
-        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            combined_df.to_excel(writer, sheet_name='Combined_Indicators')
