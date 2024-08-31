@@ -227,6 +227,22 @@ class EDA_comparison:
         sns.heatmap(self.merged_data[indicators_columns].corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
         plt.title('Economic Indicators Correlation Matrix')
         plt.show()
+    
+     # ------------------------------
+
+    def plot_pairplot(self, indicators_columns=None):
+        if indicators_columns is None:
+            indicators_columns = self.economic_indicators_data.columns.tolist()
+        
+        data_to_plot = self.economic_indicators_data[indicators_columns].dropna()
+        
+        if data_to_plot.empty:
+            print("No data available for pairplot.")
+            return
+        
+        sns.pairplot(data_to_plot)
+        plt.suptitle('Relaciones entre Indicadores Económicos', y=1.02)
+        plt.show()
 
     # ------------------------------
 
@@ -238,6 +254,7 @@ class EDA_comparison:
         self.plot_histograms()
         self.plot_boxplots()
         self.plot_correlation_matrix()
+        self.plot_pairplot()
 
 # --------------------------------------------------
 
