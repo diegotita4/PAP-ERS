@@ -13,7 +13,7 @@
 
 # LIBRARIES
 import pandas as pd
-from utils import EDA_comparison
+from utils import EDA_comparison as EDAC
 from utils import HistoricalDataDownloader as HDD
 
 # --------------------------------------------------
@@ -34,7 +34,7 @@ sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 # --------------------------------------------------
 
 # 
-EDA_comparison_economic_indicators_sp500 = EDA_comparison(
+EDA_comparison_economic_indicators_sp500 = EDAC(
     sp500_data=sp500_data,
     economic_indicators_data=economic_indicators_data
 )
@@ -52,24 +52,6 @@ EDA_comparison_economic_indicators_sp500.perform_EDA_comparison()
 
 
 
-
-# --------------------------------------------------
-
-# EXTRA
-
-# from utils import FredIndicatorFetcher as FIF
-# api_key = '2df41cfada1473ef26fa8dede4c9bef5 '
-# fetcher = FIF(api_key)
-# data_tlei = fetcher.fetch_indicator('TLEI')
-# data_cpi = fetcher.fetch_indicator('CPI')
-# data_gdp = fetcher.fetch_indicator('GDP')
-# data_cci = fetcher.fetch_indicator('CCI')
-# data_cei = fetcher.fetch_indicator('CEI')
-# fetcher.save_to_excel({'TLEI': data_tlei,
-#                        'CPI': data_cpi, 
-#                        'GDP': data_gdp,
-#                        'CCI': data_cci,
-#                        'CEI': data_cei}, 'economic_indicatorsv2.xlsx')
 
 # --------------------------------------------------
 
