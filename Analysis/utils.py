@@ -54,8 +54,8 @@ class EDA_comparison:
         self.merged_data = pd.merge(self.sp500_data, self.economic_indicators_data, left_index=True, right_index=True, how='inner')
 
         self.merged_data['Return (Norm)'] = 100 * (self.merged_data['Return'] + 1)
-        self.merged_data['Return (SMA 6)'] = self.merged_data['Return (Norm)'].rolling(window=6).mean()
         self.merged_data['Return (SMA 3)'] = self.merged_data['Return (Norm)'].rolling(window=3).mean()
+        self.merged_data['Return (SMA 6)'] = self.merged_data['Return (Norm)'].rolling(window=6).mean()
 
     # ------------------------------
 
