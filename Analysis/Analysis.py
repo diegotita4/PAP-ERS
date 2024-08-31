@@ -33,25 +33,13 @@ sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 
 # --------------------------------------------------
 
-# 
-EDA_comparison_economic_indicators_sp500 = EDAC(
-    sp500_data=sp500_data,
-    economic_indicators_data=economic_indicators_data
-)
+eda_comparison = EDAC(sp500_data, economic_indicators_data)
 
-# ------------------------------
-
-# 
-EDA_comparison_economic_indicators_sp500.perform_EDA_comparison()
+eda_comparison.plot_indicators_with_sp500_dual_axis(['CLI', 'BCI', 'CCI', 'GDP'])
 
 
-
-
-
-
-
-
-
+eda_comparison.perform_EDA_comparison()
+ 
 
 # --------------------------------------------------
 
