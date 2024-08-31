@@ -37,6 +37,7 @@ class EDA_comparison:
         self.economic_indicators_data = economic_indicators_data
         self.date_column = date_column
         self.columns_to_analyze = columns_to_analyze
+        self.sp500_data['Return'] = self.sp500_data['^GSPC CLOSE'].pct_change()
 
         if self.date_column in self.sp500_data.columns:
             self.sp500_data[self.date_column] = pd.to_datetime(self.sp500_data[self.date_column])
@@ -46,13 +47,15 @@ class EDA_comparison:
             self.economic_indicators_data[self.date_column] = pd.to_datetime(self.economic_indicators_data[self.date_column])
             self.economic_indicators_data.set_index(self.date_column, inplace=True)
 
-        self.sp500_data['Daily Return'] = self.sp500_data['^GSPC CLOSE'].pct_change()
-
         if self.columns_to_analyze:
             self.sp500_data = self.sp500_data[self.columns_to_analyze]
             self.economic_indicators_data = self.economic_indicators_data[self.columns_to_analyze]
 
         self.merged_data = pd.merge(self.sp500_data, self.economic_indicators_data, left_index=True, right_index=True, how='inner')
+
+        self.merged_data['Return (Norm)'] = 100 * (self.merged_data['Return'] +1)
+        self.merged_data['Return (SMA 6)'] = self.merged_data['Return (Norm)'].rolling(window=6).mean()
+        self.merged_data['Return (SMA 3)'] = self.merged_data['Return (Norm)'].rolling(window=3).mean()
 
     # ------------------------------
 
@@ -94,9 +97,10 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_performance(self, sp500_column='Daily Return', indicators_columns=None):
+    def plot_performance(self, sp500_column='Return (SMA 3)', indicators_columns=None):
+
         if indicators_columns is None:
-            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
@@ -117,9 +121,12 @@ class EDA_comparison:
         plt.tight_layout()
         plt.show()
 
-    def plot_performance(self, sp500_column='Daily Return', indicators_columns=None):
+    # ----------
+
+    def plot_performance(self, sp500_column='Return (SMA 3)', indicators_columns=None):
+
         if indicators_columns is None:
-            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
@@ -130,28 +137,26 @@ class EDA_comparison:
         ax1.set_xlabel('Date')
         ax1.set_ylabel('Value')
         ax1.legend(loc='best')
-        ax1.set_ylim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax1.set_ylim([90, 105])
         ax1.axhline(y=100, color='red', linestyle='--', linewidth=2)
 
-
-
         ax2.plot(self.merged_data.index, self.merged_data[sp500_column], label=sp500_column, color='black')
         ax2.set_title('S&P 500 Performance')
         ax2.set_xlabel('Date')
         ax2.set_ylabel('Value')
         ax2.legend(loc='best')
-        ax2.set_ylim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax2.set_ylim([90, 105])
         ax2.axhline(y=100, color='red', linestyle='--', linewidth=2)
-
 
         plt.tight_layout()
         plt.show()
 
     # ------------------------------
 
-    def plot_histograms(self, sp500_column='Daily Return', indicators_columns=None):
+    def plot_histograms(self, sp500_column='Return (SMA 3)', indicators_columns=None):
+
         if indicators_columns is None:
-            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
@@ -166,36 +171,37 @@ class EDA_comparison:
         plt.tight_layout()
         plt.show()
 
-    def plot_histograms(self, sp500_column='Daily Return', indicators_columns=None):
+    # ----------
+
+    def plot_histograms(self, sp500_column='Return (SMA 3)', indicators_columns=None):
+
         if indicators_columns is None:
-            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
         for indicator in indicators_columns:
             ax1.hist(self.merged_data[indicator].dropna(), bins=30, alpha=0.5, label=indicator)
-        
-        # Añadir la línea vertical en el valor 100 en el primer histograma
+
         ax1.axvline(x=100, color='red', linestyle='--', linewidth=2)
-        ax1.set_xlim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax1.set_xlim([90, 105])
         ax1.set_title('Economic Indicators Histograms')
-        
+
         ax2.hist(self.merged_data[sp500_column].dropna(), bins=30, color='purple', alpha=0.5, label=sp500_column)
-        
-        # Añadir la línea vertical en el valor 100 en el segundo histograma
+
         ax2.axvline(x=100, color='red', linestyle='--', linewidth=2)
-        ax2.set_xlim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax2.set_xlim([90, 105])
         ax2.set_title('S&P 500 Histogram')
 
         plt.tight_layout()
         plt.show()
 
-
     # ------------------------------
 
-    def plot_boxplots(self, sp500_column='Daily Return', indicators_columns=None):
+    def plot_boxplots(self, sp500_column='Return (SMA 3)', indicators_columns=None):
+
         if indicators_columns is None:
-            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
@@ -212,9 +218,10 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_correlation_matrix(self, sp500_column='Daily Return', indicators_columns=None):
+    def plot_correlation_matrix(self, indicators_columns=None):
+
         if indicators_columns is None:
-            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+            indicators_columns = (['CLI', 'CCI', 'GDP', 'BCI'])
 
         plt.figure(figsize=(12, 8))
         sns.heatmap(self.merged_data[indicators_columns].corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
@@ -224,6 +231,7 @@ class EDA_comparison:
     # ------------------------------
 
     def perform_EDA_comparison(self):
+
         self.data_summary()
         self.data_statistics()
         self.plot_performance()
