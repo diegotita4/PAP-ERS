@@ -53,7 +53,7 @@ class EDA_comparison:
 
         self.merged_data = pd.merge(self.sp500_data, self.economic_indicators_data, left_index=True, right_index=True, how='inner')
 
-        self.merged_data['Return (Norm)'] = 100 * (self.merged_data['Return'] +1)
+        self.merged_data['Return (Norm)'] = 100 * (self.merged_data['Return'] + 1)
         self.merged_data['Return (SMA 6)'] = self.merged_data['Return (Norm)'].rolling(window=6).mean()
         self.merged_data['Return (SMA 3)'] = self.merged_data['Return (Norm)'].rolling(window=3).mean()
 
@@ -61,7 +61,7 @@ class EDA_comparison:
 
     def data_summary(self):
         print("First few rows of the data:")
-        print(self.merged_data.head())
+        print(self.merged_data.head(60))
 
         print("\nInformation:")
         print(self.merged_data.info())
@@ -275,7 +275,7 @@ class HistoricalDataDownloader:
         
         for ticker in self.tickers:
             try:
-                df = yf.download(ticker, start=self.start_date, end=end_date)[['Close']].copy()
+                df = yf.download(ticker, start=self.start_date, end=end_date, interval='1mo')[['Close']].copy()
                 df.rename(columns={'Close': f'{ticker} CLOSE'}, inplace=True)
 
                 if self.data.empty:
