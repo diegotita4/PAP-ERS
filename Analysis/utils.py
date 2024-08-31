@@ -322,9 +322,10 @@ class EDA_comparison:
                     ax.set_xlabel('')
                     ax.set_xticks([])
 
-        plt.suptitle('Economic indicators relation', y=1.05)  
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # Ajustar la figura para que deje espacio para el título
+        plt.suptitle('Economic Indicators Relation', y=1.03, fontsize=16)  # Ajustar la posición y el tamaño del título
         plt.show()
+
 
 
 
