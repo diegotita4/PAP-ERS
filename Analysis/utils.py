@@ -121,7 +121,7 @@ class EDA_comparison:
         if indicators_columns is None:
             indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
         for indicator in indicators_columns:
             ax1.plot(self.merged_data.index, self.merged_data[indicator], label=indicator)
@@ -170,7 +170,7 @@ class EDA_comparison:
         if indicators_columns is None:
             indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
         for indicator in indicators_columns:
             ax1.hist(self.merged_data[indicator].dropna(), bins=30, alpha=0.5, label=indicator)
