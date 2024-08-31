@@ -117,6 +117,36 @@ class EDA_comparison:
         plt.tight_layout()
         plt.show()
 
+    def plot_performance(self, sp500_column='Daily Return', indicators_columns=None):
+        if indicators_columns is None:
+            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+
+        for indicator in indicators_columns:
+            ax1.plot(self.merged_data.index, self.merged_data[indicator], label=indicator)
+
+        ax1.set_title('Economic Indicators Performance')
+        ax1.set_xlabel('Date')
+        ax1.set_ylabel('Value')
+        ax1.legend(loc='best')
+        ax1.set_ylim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax1.axhline(y=100, color='red', linestyle='--', linewidth=2)
+
+
+
+        ax2.plot(self.merged_data.index, self.merged_data[sp500_column], label=sp500_column, color='black')
+        ax2.set_title('S&P 500 Performance')
+        ax2.set_xlabel('Date')
+        ax2.set_ylabel('Value')
+        ax2.legend(loc='best')
+        ax2.set_ylim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax2.axhline(y=100, color='red', linestyle='--', linewidth=2)
+
+
+        plt.tight_layout()
+        plt.show()
+
     # ------------------------------
 
     def plot_histograms(self, sp500_column='Daily Return', indicators_columns=None):
@@ -135,6 +165,31 @@ class EDA_comparison:
 
         plt.tight_layout()
         plt.show()
+
+    def plot_histograms(self, sp500_column='Daily Return', indicators_columns=None):
+        if indicators_columns is None:
+            indicators_columns = self.merged_data.columns.drop([sp500_column, '^GSPC CLOSE']).tolist()
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+
+        for indicator in indicators_columns:
+            ax1.hist(self.merged_data[indicator].dropna(), bins=30, alpha=0.5, label=indicator)
+        
+        # Añadir la línea vertical en el valor 100 en el primer histograma
+        ax1.axvline(x=100, color='red', linestyle='--', linewidth=2)
+        ax1.set_xlim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax1.set_title('Economic Indicators Histograms')
+        
+        ax2.hist(self.merged_data[sp500_column].dropna(), bins=30, color='purple', alpha=0.5, label=sp500_column)
+        
+        # Añadir la línea vertical en el valor 100 en el segundo histograma
+        ax2.axvline(x=100, color='red', linestyle='--', linewidth=2)
+        ax2.set_xlim([90, 105])  # Ajustar los límites del eje x para asegurar que 100 esté en el rango
+        ax2.set_title('S&P 500 Histogram')
+
+        plt.tight_layout()
+        plt.show()
+
 
     # ------------------------------
 
