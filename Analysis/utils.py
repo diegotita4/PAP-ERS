@@ -202,15 +202,6 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_correlation_matrix(self):
-
-        plt.figure(figsize=(12, 8))
-        sns.heatmap(self.economic_indicators_data.corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
-        plt.title('Economic Indicators')
-        plt.show()
-
-    # ------------------------------
-
     def plot_relations(self):
 
         sns.set(style="white")
@@ -247,6 +238,15 @@ class EDA_comparison:
 
     # ------------------------------
 
+    def plot_correlation_matrix(self):
+
+        plt.figure(figsize=(12, 8))
+        sns.heatmap(self.economic_indicators_data.corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+        plt.title('Economic Indicators')
+        plt.show()
+
+    # ------------------------------
+
     def perform_EDA_comparison(self):
 
         self.data_summary()
@@ -255,8 +255,8 @@ class EDA_comparison:
         self.plot_performances_grpl()
         self.plot_histograms()
         self.plot_boxplots()
-        self.plot_correlation_matrix()
         self.plot_relations()
+        self.plot_correlation_matrix()
 
 # --------------------------------------------------
 
