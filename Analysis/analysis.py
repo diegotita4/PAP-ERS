@@ -23,19 +23,19 @@ HDD_sp500 = HDD(
     tickers=['^GSPC'],
     start_date="2000-01-01")
 HDD_sp500.download_data()
-HDD_sp500.save_data(filepath="Data/sp500_data.xlsx")
+HDD_sp500.save_data(filepath="Data\sp500_data.xlsx")
 
 # ------------------------------
 
 # 
-economic_indicators_data = pd.read_excel("Data/economic_indicators_data.xlsx")
-sp500_data = pd.read_excel("Data/sp500_data.xlsx")
+economic_indicators_data = pd.read_excel("Data\economic_indicators_data.xlsx")
+sp500_data = pd.read_excel("Data\sp500_data.xlsx")
 
 # --------------------------------------------------
 
 # 
-eda_comparison = EDAC(sp500_data, economic_indicators_data)
-eda_comparison.perform_EDA_comparison()
+# eda_comparison = EDAC(sp500_data, economic_indicators_data)
+# eda_comparison.perform_EDA_comparison()
 
 # --------------------------------------------------
 
@@ -52,7 +52,7 @@ eda_comparison.perform_EDA_comparison()
 
 # NOTAS
 
-a = ['^GSPC', 'A', 'AAL', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE',
+a = ['A', 'AAL', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE',
      'ADI', 'ADM', 'ADP', 'ADSK', 'AEE', 'AEP', 'AES', 'AFL', 'AIG', 'AIZ',
      'AJG', 'AKAM', 'ALB', 'ALGN', 'ALL', 'ALLE', 'AMAT', 'AMCR', 'AMD', 'AME',
      'AMGN', 'AMP', 'AMT', 'AMZN', 'ANET', 'ANSS', 'AON', 'AOS', 'APA', 'APD',
@@ -103,4 +103,26 @@ a = ['^GSPC', 'A', 'AAL', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE',
      'V', 'VICI', 'VLO', 'VLTO', 'VMC', 'VRSK', 'VRSN', 'VRTX', 'VST', 'VTR',
      'VTRS', 'VZ', 'WAB', 'WAT', 'WBA', 'WBD', 'WDAY', 'WDC', 'WEC', 'WELL',
      'WFC', 'WM', 'WMB', 'WMT', 'WRB', 'WST', 'WTW', 'WY', 'WYNN', 'XEL',
-     'XOM', 'XYL', 'YUM', 'ZBH', 'ZBRA', 'ZS', 'ZTS']
+     'XOM', 'XYL', 'YUM', 'ZBH', 'ZBRA', 'ZS', 'ZTS'] # '^GSPC', SP500 
+
+
+start_date = '2000-01-01'  # Start date for historical data
+
+downloader = HDD(a, start_date)
+
+# Step 2: Download the historical data for the given tickers
+end_date = '2024-01-01'  # Optional end date for the data download
+downloader.download_data(end_date)
+
+# Step 3: Calculate beta values based on a market index (S&P 500 by default)
+downloader.calculate_beta(market_ticker='^GSPC')  # '^GSPC' is the ticker for S&P 500
+
+# Step 4: Classify companies as Procyclical or Anticyclical
+downloader.classify_cyclicality()
+
+# Step 5: Save the data, beta values, and cyclicality labels to an Excel file
+output_filepath = 'Data\historical_data_with_beta.xlsx'
+downloader.save_data(output_filepath)
+
+# Optional: You can also print the cyclicality labels to verify the results
+print(downloader.cyclicality_labels)

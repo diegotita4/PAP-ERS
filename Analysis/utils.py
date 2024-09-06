@@ -268,6 +268,8 @@ class HistoricalDataDownloader:
         self.tickers = tickers
         self.start_date = start_date
         self.data = pd.DataFrame()
+        self.beta_values = pd.DataFrame()
+        self.cyclicality_labels = pd.DataFrame()
 
     # ------------------------------
 
@@ -293,12 +295,88 @@ class HistoricalDataDownloader:
 
     # ------------------------------
 
-    def save_data(self, filepath):
+    def calculate_beta(self, market_ticker='^GSPC'):
+        """
+        Calculate beta values for each ticker based on the specified market index.
+        """
+        try:
+            # Download market data (S&P 500)
+            market_data = yf.download(market_ticker, start=self.start_date, interval='1mo')['Adj Close'].copy()
+            market_data = market_data.pct_change().dropna()
+            market_data.rename('Market', inplace=True)
 
-        directory = os.path.dirname(filepath)
-        os.makedirs(directory, exist_ok=True)
-        self.data.to_excel(filepath, index=False, sheet_name="data")
-        print(f"Data saved to {filepath}")
+            # Calculate log returns for each stock
+            returns_data = pd.DataFrame()
+
+            for ticker in self.tickers:
+                stock_returns = self.data[f'{ticker} CLOSE'].pct_change().dropna()
+                returns_data[ticker] = stock_returns
+
+            # Align data with market data
+            returns_data = returns_data.merge(market_data, left_index=True, right_index=True, how='inner')
+
+            # Calculate rolling beta values
+            for ticker in self.tickers:
+                rolling_cov = returns_data[ticker].rolling(window=12).cov(returns_data['Market'])
+                rolling_var_market = returns_data['Market'].rolling(window=12).var()
+                self.beta_values[ticker] = rolling_cov / rolling_var_market
+
+            self.beta_values.dropna(inplace=True)
+
+        except Exception as e:
+            print(f"Failed to calculate beta values: {e}")
+
+    # ------------------------------
+
+    def classify_cyclicality(self):
+        """
+        Classify each ticker as procyclical or anticyclical at each point in time based on beta values.
+        A stock is classified as:
+        - 'Anticyclical' if its beta at a specific point in time is between 0 and 0.7 (inclusive).
+        - 'Procyclical' if its beta at a specific point in time is greater than 0.7.
+        This classification is done for each time period individually.
+        """
+
+        try:
+            # Define the classification function based on the beta for each time period
+            def label_beta_for_each_time(beta_value):
+                """
+                Classify an asset based on its beta at a specific point in time:
+                - 'Anticyclical' if the beta is between 0 and 0.7.
+                - 'Procyclical' if the beta is greater than 0.7.
+                """
+                if 0 <= beta_value <= 0.7:
+                    return 'Anticyclical'
+                elif beta_value > 0.7:
+                    return 'Procyclical'
+                else:
+                    return 'Unclassified'  # Catch negative or undefined beta values.
+
+            # Apply the classification function to each beta value for each ticker at each time
+            self.cyclicality_labels = self.beta_values.applymap(label_beta_for_each_time)
+
+        except Exception as e:
+            print(f"Failed to classify cyclicality: {e}")
+
+    # ------------------------------
+
+    def save_data(self, filepath):
+        """
+        Save the downloaded data, beta values, and cyclicality labels to an Excel file.
+        """
+        try:
+            directory = os.path.dirname(filepath)
+            os.makedirs(directory, exist_ok=True)
+
+            with pd.ExcelWriter(filepath) as writer:
+                self.data.to_excel(writer, index=False, sheet_name="Historical Data")
+                self.beta_values.to_excel(writer, sheet_name="Beta Values")
+                self.cyclicality_labels.to_excel(writer, sheet_name="Cyclicality Labels")
+
+            print(f"Data saved to {filepath}")
+
+        except Exception as e:
+            print(f"Failed to save data: {e}")
 
 # --------------------------------------------------
 
