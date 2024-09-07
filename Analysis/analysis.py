@@ -15,6 +15,7 @@
 import pandas as pd
 from utils import EDA_comparison as EDAC
 from utils import HistoricalDataDownloader as HDD
+from utils import Models
 
 # --------------------------------------------------
 
@@ -23,13 +24,13 @@ HDD_sp500 = HDD(
     tickers=['^GSPC'],
     start_date="2000-01-01")
 HDD_sp500.download_data()
-HDD_sp500.save_data(filepath="Data\sp500_data.xlsx")
+HDD_sp500.save_data(filepath="Data/sp500_data.xlsx")
 
 # ------------------------------
 
 # 
-economic_indicators_data = pd.read_excel("Data\economic_indicators_data.xlsx")
-sp500_data = pd.read_excel("Data\sp500_data.xlsx")
+economic_indicators_data = pd.read_excel("Data/economic_indicators_data.xlsx")
+sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 
 # --------------------------------------------------
 
@@ -108,21 +109,29 @@ a = ['A', 'AAL', 'AAPL', 'ABBV', 'ABNB', 'ABT', 'ACGL', 'ACN', 'ADBE',
 
 start_date = '2000-01-01'  # Start date for historical data
 
-downloader = HDD(a, start_date)
+# downloader = HDD(a, start_date)
 
 # Step 2: Download the historical data for the given tickers
-end_date = '2024-01-01'  # Optional end date for the data download
-downloader.download_data(end_date)
+# end_date = '2024-01-01'  # Optional end date for the data download
+# downloader.download_data(end_date)
 
 # Step 3: Calculate beta values based on a market index (S&P 500 by default)
-downloader.calculate_beta(market_ticker='^GSPC')  # '^GSPC' is the ticker for S&P 500
+# downloader.calculate_beta(market_ticker='^GSPC')  # '^GSPC' is the ticker for S&P 500
 
 # Step 4: Classify companies as Procyclical or Anticyclical
-downloader.classify_cyclicality()
+# downloader.classify_cyclicality()
 
 # Step 5: Save the data, beta values, and cyclicality labels to an Excel file
-output_filepath = 'Data\historical_data_with_beta.xlsx'
-downloader.save_data(output_filepath)
+# output_filepath = 'Data\historical_data_with_beta.xlsx'
+# downloader.save_data(output_filepath)
 
 # Optional: You can also print the cyclicality labels to verify the results
-print(downloader.cyclicality_labels)
+# print(downloader.cyclicality_labels)
+
+# Create an instance of the class with economic indicators and S&P 500 data
+economic_cycle_model_with_sp500 = Models(economic_indicators_data, sp500_data)
+
+# Train the model
+report_with_sp500 = economic_cycle_model_with_sp500.train_model()
+print(report_with_sp500)
+

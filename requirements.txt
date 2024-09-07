@@ -18,6 +18,7 @@ numpy==2.1.0
 openpyxl==3.1.5
 packaging==24.1
 pandas==2.2.2
+patsy==0.5.6
 peewee==3.17.6
 pillow==10.4.0
 platformdirs==4.2.2
@@ -30,6 +31,7 @@ scipy==1.14.1
 seaborn==0.13.2
 six==1.16.0
 soupsieve==2.6
+statsmodels==0.14.2
 threadpoolctl==3.5.0
 tzdata==2024.1
 urllib3==2.2.2
