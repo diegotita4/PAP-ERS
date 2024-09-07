@@ -19,6 +19,9 @@ import seaborn as sns
 import yfinance as yf
 import matplotlib.pyplot as plt
 from scipy import stats
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 
 # ------------------------------
 
@@ -380,6 +383,64 @@ class HistoricalDataDownloader:
 
 # --------------------------------------------------
 
+# 
+class EconomicCycleModelWithSP500:
+    def __init__(self, indicators_df, sp500_df):
+        # Combine economic indicators with S&P 500 historical data
+        self.data = self._merge_data(indicators_df, sp500_df)
+        
+    def _merge_data(self, indicators_df, sp500_df):
+        # Convert 'Date' columns to datetime format
+        indicators_df['Date'] = pd.to_datetime(indicators_df['Date'])
+        sp500_df['Date'] = pd.to_datetime(sp500_df['Date'])
+        
+        # Merge both datasets based on 'Date'
+        merged_data = pd.merge(indicators_df, sp500_df, on='Date', how='inner')
+        
+        # Create the percentage change column for the S&P 500
+        merged_data['SP500_Change'] = merged_data['^GSPC CLOSE'].pct_change()
+        
+        # Define the target column (1, 0, or -1)
+        merged_data['Target'] = merged_data['SP500_Change'].apply(lambda x: 1 if x > 0.02 else (-1 if x < -0.02 else 0))
+        
+        # Remove rows with null values in the percentage change column
+        merged_data.dropna(subset=['SP500_Change'], inplace=True)
+        
+        return merged_data
+
+    def train_model(self):
+        # Define the predictor variables (CLI, BCI, GDP, CCI, and SP500 historical data) and the target variable (Target)
+        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
+        y = self.data['Target']
+        
+        # Split the dataset into training and testing sets (80% training, 20% testing)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Train the logistic regression model
+        self.model = LogisticRegression(multi_class='ovr', solver='liblinear')
+        self.model.fit(X_train, y_train)
+        
+        # Make predictions on the test set
+        y_pred = self.model.predict(X_test)
+        
+        # Save the test sets and predictions for future reference
+        self.X_test = X_test
+        self.y_test = y_test
+        self.y_pred = y_pred
+        
+        # Return the classification report
+        return classification_report(y_test, y_pred)
+    
+    def predict(self, new_data):
+        # Make predictions on new data
+        return self.model.predict(new_data)
+
+# Create an instance of the class with economic indicators and S&P 500 data
+economic_cycle_model_with_sp500 = EconomicCycleModelWithSP500(data_df, sp500_data)
+
+# Train the model
+report_with_sp500 = economic_cycle_model_with_sp500.train_model()
+print(report_with_sp500)
 
 
 
