@@ -128,10 +128,16 @@ start_date = '2000-01-01'  # Start date for historical data
 # Optional: You can also print the cyclicality labels to verify the results
 # print(downloader.cyclicality_labels)
 
-# Create an instance of the class with economic indicators and S&P 500 data
-economic_cycle_model_with_sp500 = Models(economic_indicators_data, sp500_data)
+# Create an instance of the model
+model = Models(economic_indicators_data, sp500_data)
 
-# Train the model
-report_with_sp500 = economic_cycle_model_with_sp500.train_model()
-print(report_with_sp500)
+# Train the logistic regression model
+lr_accuracy, lr_report = model.train_logistic_regression()
+print("Logistic Regression Accuracy:", lr_accuracy)
+print(lr_report)
+
+# Train the VAR model
+model.train_var_model(maxlags=15)
+var_accuracy = model.evaluate_var()
+print("VAR Model Accuracy:", var_accuracy)
 

@@ -421,7 +421,7 @@ class Models:
         
         return merged_data
     
-    def train_model(self):
+    def train_logistic_regression(self):
         # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data) and the target variable (Target)
         X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
         y = self.data['Target']
@@ -430,30 +430,75 @@ class Models:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
         # Train the OneVsRest logistic regression model with adjusted hyperparameters
-        self.model = OneVsRestClassifier(LogisticRegression(
+        self.lr_model = OneVsRestClassifier(LogisticRegression(
             solver='saga',   # You can experiment with 'saga' or other solvers
             C=0.3,                # Regularization strength (smaller values = stronger regularization)
             penalty='l2',          # Regularization type (l1, l2, or elasticnet)
             class_weight='balanced' # Handle class imbalance
         ))
         
-        self.model.fit(X_train, y_train)
+        self.lr_model.fit(X_train, y_train)
         
         # Make predictions on the test set
-        y_pred = self.model.predict(X_test)
+        y_pred = self.lr_model.predict(X_test)
         
-        # Save the test sets and predictions for future reference
+        # Calculate accuracy and classification report
+        accuracy = accuracy_score(y_test, y_pred)
+        report = classification_report(y_test, y_pred)
+        
+        # Save test data and predictions
         self.X_test = X_test
         self.y_test = y_test
-        self.y_pred = y_pred
+        self.lr_y_pred = y_pred
         
-        # Return the classification report to assess accuracy
-        return classification_report(y_test, y_pred)
+        return accuracy, report
     
-    def predict(self, new_data):
-        # Make predictions on new data
-        return self.model.predict(new_data)
+    def train_var_model(self, maxlags=15):
+        # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data)
+        data = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
+        
+        # Split the dataset into training and testing sets (80% training, 20% testing)
+        train_size = int(len(data) * 0.8)
+        train_data, test_data = data[:train_size], data[train_size:]
+        
+        # Train the VAR model
+        model = VAR(train_data)
+        
+        # Fit the model using the specified number of lags
+        self.var_model = model.fit(maxlags=maxlags, ic='aic')  # Select the best lag based on the Akaike criterion (AIC)
+        
+        # Save training and test data
+        self.train_data = train_data
+        self.test_data = test_data
     
+    def predict_var(self, steps=10):
+        # Use the trained VAR model to make predictions
+        predictions = self.var_model.forecast(self.train_data.values[-self.var_model.k_ar:], steps=steps)
+        
+        # Convert predictions to a DataFrame with the same columns as the original data
+        predictions_df = pd.DataFrame(predictions, columns=self.train_data.columns)
+        
+        return predictions_df
+    
+    def evaluate_var(self):
+        # Generate predictions for the same length as the test set
+        steps = len(self.test_data)
+        var_predictions = self.var_model.forecast(self.train_data.values[-self.var_model.k_ar:], steps=steps)
+        
+        # Convert predictions to a DataFrame
+        var_predictions_df = pd.DataFrame(var_predictions, columns=self.train_data.columns)
+        
+        # Evaluate the accuracy of the VAR model on the S&P 500 predictions
+        actual_sp500 = self.test_data['^GSPC CLOSE'].values
+        predicted_sp500 = var_predictions_df['^GSPC CLOSE'].values
+        
+        # Calculate accuracy based on direction of change
+        actual_direction = np.sign(np.diff(actual_sp500))
+        predicted_direction = np.sign(np.diff(predicted_sp500))
+        accuracy = np.mean(actual_direction == predicted_direction)
+        
+        return accuracy
+
     def download_sp500_data(self):
         # Download historical data for S&P 500 from Yahoo Finance
         sp500_data = yf.download('^GSPC', start='2010-01-01', end='2024-07-01')
@@ -463,6 +508,8 @@ class Models:
     def download_economic_data(self):
         # Download economic indicators from appropriate API (to be implemented)
         pass
+
+
 
 
 # --------------------------------------------------
