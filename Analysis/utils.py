@@ -23,7 +23,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.multiclass import OneVsRestClassifier
-from statsmodels.tsa.api import VAR
+from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import StandardScaler
 
 # ------------------------------
 
@@ -429,13 +430,13 @@ class Models:
         # Split the dataset into training and testing sets (80% training, 20% testing)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        # Train the OneVsRest logistic regression model with adjusted hyperparameters
-        self.lr_model = OneVsRestClassifier(LogisticRegression(
+        # Train the logistic regression model with adjusted hyperparameters
+        self.lr_model = LogisticRegression(
             solver='saga',   # You can experiment with 'saga' or other solvers
             C=0.3,                # Regularization strength (smaller values = stronger regularization)
             penalty='l2',          # Regularization type (l1, l2, or elasticnet)
             class_weight='balanced' # Handle class imbalance
-        ))
+        )
         
         self.lr_model.fit(X_train, y_train)
         
@@ -453,52 +454,47 @@ class Models:
         
         return accuracy, report
     
-    def train_var_model(self, maxlags=15):
-        # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data)
-        data = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
+    def train_mlp(self, activation='relu'):
+        # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data) and the target variable (Target)
+        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
+        y = self.data['Target']
+        
+        # Scale data using StandardScaler for better neural network performance
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
         
         # Split the dataset into training and testing sets (80% training, 20% testing)
-        train_size = int(len(data) * 0.8)
-        train_data, test_data = data[:train_size], data[train_size:]
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
         
-        # Train the VAR model
-        model = VAR(train_data)
-        
-        # Fit the model using the specified number of lags
-        self.var_model = model.fit(maxlags=maxlags, ic='aic')  # Select the best lag based on the Akaike criterion (AIC)
-        
-        # Save training and test data
-        self.train_data = train_data
-        self.test_data = test_data
-    
-    def predict_var(self, steps=10):
-        # Use the trained VAR model to make predictions
-        predictions = self.var_model.forecast(self.train_data.values[-self.var_model.k_ar:], steps=steps)
-        
-        # Convert predictions to a DataFrame with the same columns as the original data
-        predictions_df = pd.DataFrame(predictions, columns=self.train_data.columns)
-        
-        return predictions_df
-    
-    def evaluate_var(self):
-        # Generate predictions for the same length as the test set
-        steps = len(self.test_data)
-        var_predictions = self.var_model.forecast(self.train_data.values[-self.var_model.k_ar:], steps=steps)
-        
-        # Convert predictions to a DataFrame
-        var_predictions_df = pd.DataFrame(var_predictions, columns=self.train_data.columns)
-        
-        # Evaluate the accuracy of the VAR model on the S&P 500 predictions
-        actual_sp500 = self.test_data['^GSPC CLOSE'].values
-        predicted_sp500 = var_predictions_df['^GSPC CLOSE'].values
-        
-        # Calculate accuracy based on direction of change
-        actual_direction = np.sign(np.diff(actual_sp500))
-        predicted_direction = np.sign(np.diff(predicted_sp500))
-        accuracy = np.mean(actual_direction == predicted_direction)
-        
-        return accuracy
+        # Train a Multi-Layer Perceptron (MLP) Neural Network
+        # Modificación en el constructor del MLPClassifier para mejorar el rendimiento
+        self.mlp_model = MLPClassifier(
+            hidden_layer_sizes=(128, 64, 32),  # Aumento en el número de neuronas en las capas ocultas
+            max_iter=1500,                     # Incrementar el número de iteraciones para mayor convergencia
+            activation='relu',                 # Mantener ReLU como función de activación
+            solver='adam',                     # Adam es un buen optimizador por defecto
+            alpha=0.005,                       # Aumentar ligeramente la regularización para mejorar la generalización
+            learning_rate_init=0.0005,         # Reducir la tasa de aprendizaje para ajustes más finos
+            random_state=42                    # Fijar la semilla para replicabilidad
+        )
 
+        
+        self.mlp_model.fit(X_train, y_train)
+        
+        # Make predictions on the test set
+        y_pred = self.mlp_model.predict(X_test)
+        
+        # Calculate accuracy and classification report
+        accuracy = accuracy_score(y_test, y_pred)
+        report = classification_report(y_test, y_pred)
+        
+        # Save test data and predictions
+        self.X_test = X_test
+        self.y_test = y_test
+        self.mlp_y_pred = y_pred
+        
+        return accuracy, report
+    
     def download_sp500_data(self):
         # Download historical data for S&P 500 from Yahoo Finance
         sp500_data = yf.download('^GSPC', start='2010-01-01', end='2024-07-01')
@@ -508,6 +504,7 @@ class Models:
     def download_economic_data(self):
         # Download economic indicators from appropriate API (to be implemented)
         pass
+
 
 
 

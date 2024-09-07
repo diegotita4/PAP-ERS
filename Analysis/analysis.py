@@ -128,6 +128,8 @@ start_date = '2000-01-01'  # Start date for historical data
 # Optional: You can also print the cyclicality labels to verify the results
 # print(downloader.cyclicality_labels)
 
+
+# Training and test models ! =) 
 # Create an instance of the model
 model = Models(economic_indicators_data, sp500_data)
 
@@ -136,8 +138,17 @@ lr_accuracy, lr_report = model.train_logistic_regression()
 print("Logistic Regression Accuracy:", lr_accuracy)
 print(lr_report)
 
-# Train the VAR model
-model.train_var_model(maxlags=15)
-var_accuracy = model.evaluate_var()
-print("VAR Model Accuracy:", var_accuracy)
+# Train the MLP neural network with ReLU activation
+mlp_accuracy_relu, mlp_report_relu = model.train_mlp(activation='relu')
+print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
+print(mlp_report_relu)
 
+# Train the MLP neural network with tanh activation
+mlp_accuracy_tanh, mlp_report_tanh = model.train_mlp(activation='tanh')
+print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
+print(mlp_report_tanh)
+
+# Train the MLP neural network with logistic activation
+mlp_accuracy_logistic, mlp_report_logistic = model.train_mlp(activation='logistic')
+print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
+print(mlp_report_logistic)
