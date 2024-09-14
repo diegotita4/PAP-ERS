@@ -23,8 +23,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import classification_report, accuracy_score
+from xgboost import XGBClassifier
 
 # ------------------------------
 
@@ -460,6 +461,52 @@ class Models:
         self.y_test = y_test
         self.lr_y_pred = y_pred
         
+        return accuracy, report
+    
+
+    # ------------------------------
+
+    def train_xgboost(self):
+        # Define features and target
+        X = self.data[['CLI', 'BCI', 'CCI', '^GSPC_AC', 'SP500_Change']]
+        y = self.data['Target']
+
+        # Split the data into training and testing sets
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Initialize the XGBoost classifier with default parameters
+        model = XGBClassifier(use_label_encoder=False, eval_metric='mlogloss')
+
+        # Define the grid of hyperparameters to search
+        param_grid = {
+            'n_estimators': [100, 200, 300],      # Number of trees
+            'learning_rate': [0.01, 0.1, 0.3],    # Learning rate
+            'max_depth': [3, 5, 7],               # Maximum depth of trees
+            'subsample': [0.6, 0.8, 1.0],         # Fraction of samples to use for each tree
+            'colsample_bytree': [0.6, 0.8, 1.0],  # Fraction of features to use for each tree
+            'gamma': [0, 0.1, 0.5]                # Minimum loss reduction for making a split
+        }
+
+        # Use GridSearchCV to find the best hyperparameters
+        grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='accuracy', verbose=1)
+        grid_search.fit(X_train, y_train)
+
+        # Save the best model
+        self.xgb_model = grid_search.best_estimator_
+
+        # Predict using the best model found by GridSearchCV
+        y_pred = self.xgb_model.predict(X_test)
+
+        # Evaluate the model
+        accuracy = accuracy_score(y_test, y_pred)
+        report = classification_report(y_test, y_pred)
+
+        # Save test data and predictions
+        self.X_test = X_test
+        self.y_test = y_test
+        self.xgb_y_pred = y_pred
+
+        print(f"Best hyperparameters: {grid_search.best_params_}")
         return accuracy, report
 
     # ------------------------------

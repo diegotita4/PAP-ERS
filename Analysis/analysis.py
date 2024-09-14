@@ -17,6 +17,7 @@ from utils import Models
 from utils import EDA_comparison as EDAC
 from utils import HistoricalDataDownloader as HDD
 
+
 # --------------------------------------------------
 
 # INITIALIZE HDD FOR THE BENCHMARK
@@ -45,10 +46,10 @@ assets = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
 # ------------------------------
 
 # INITIALIZE HDD FOR THE S&P 500 ASSETS
-HDD_assets = HDD(tickers=assets)
-HDD_assets.download_adj_close()
-HDD_assets.download_beta()
-HDD_assets.save_data(filepath="Data/assets_data.xlsx")
+# HDD_assets = HDD(tickers=assets)
+# HDD_assets.download_adj_close()
+# HDD_assets.download_beta()
+# HDD_assets.save_data(filepath="Data/assets_data.xlsx")
 
 # ------------------------------
 
@@ -90,3 +91,8 @@ print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
 print(mlp_report_logistic)
 
 # --------------------------------------------------
+
+# Entrenar el modelo XGBoost y obtener el reporte
+accuracy, report = model.train_xgboost()
+print(f"Accuracy XGBOOST: {accuracy}")
+print(f"Classification Report XGBOOST:\n{report}")
