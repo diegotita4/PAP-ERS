@@ -19,12 +19,12 @@ import seaborn as sns
 import yfinance as yf
 import matplotlib.pyplot as plt
 from scipy import stats
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier
+from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import StandardScaler
 
 # ------------------------------
 
@@ -99,7 +99,7 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_performances_indv(self, sp500_column='^GSPC CLOSE'):
+    def plot_performances_indv(self, sp500_column='^GSPC_AC'):
 
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         axs = axs.flatten()
@@ -125,7 +125,7 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_performances_grpl(self, sp500_column='^GSPC CLOSE'):
+    def plot_performances_grpl(self, sp500_column='^GSPC_AC'):
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
@@ -153,7 +153,7 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_histograms(self, sp500_column='^GSPC CLOSE'):
+    def plot_histograms(self, sp500_column='^GSPC_AC'):
 
         ax1 = plt.subplot2grid((2, 2), (0, 0), colspan=2)
 
@@ -184,7 +184,7 @@ class EDA_comparison:
 
     # ------------------------------
 
-    def plot_boxplots(self, sp500_column='^GSPC CLOSE'):
+    def plot_boxplots(self, sp500_column='^GSPC_AC'):
 
         data = [self.merged_data[indicator].dropna() for indicator in self.economic_indicators_data.columns.tolist()]
         colors = [self.indicators_colors.get(indicator, 'gray') for indicator in self.economic_indicators_data.columns.tolist()]
@@ -266,119 +266,117 @@ class EDA_comparison:
 
 # --------------------------------------------------
 
-# 
 class HistoricalDataDownloader:
 
-    def __init__(self, tickers, start_date):
-
+    def __init__(self, tickers):
         self.tickers = tickers
-        self.start_date = start_date
-        self.data = pd.DataFrame()
-        self.beta_values = pd.DataFrame()
-        self.cyclicality_labels = pd.DataFrame()
+        self.start_date = '2000-01-01'
+        self.end_date = '2024-06-01'
+        self.adj_close = pd.DataFrame()
+        self.beta = pd.DataFrame()
+        self.rename_tickers()
 
     # ------------------------------
 
-    def download_data(self, end_date=None):
+    def rename_tickers(self):
+        ticker_rename_map = {
+            'BRK.B': 'BRK-B',
+            'BF.B': 'BF-B'
+        }
+        self.tickers = [ticker_rename_map.get(ticker, ticker) for ticker in self.tickers]
 
-        self.data = pd.DataFrame()
+    # ------------------------------
+
+    def download_adj_close(self):
 
         for ticker in self.tickers:
             try:
-                df = yf.download(ticker, start=self.start_date, end=end_date, interval='1mo')[['Close']].copy()
-                df.rename(columns={'Close': f'{ticker} CLOSE'}, inplace=True)
+                df = yf.download(ticker, start=self.start_date, end=self.end_date, interval='1mo')[['Adj Close']].copy()
+                df.rename(columns={'Adj Close': f'{ticker}_AC'}, inplace=True)
 
-                if self.data.empty:
-                    self.data = df
+                if df.empty:
+                    print(f"No data found for {ticker} in the given range.")
+                    continue
+
+                if self.adj_close.empty:
+                    self.adj_close = df
 
                 else:
-                    self.data = self.data.merge(df, left_index=True, right_index=True, how='outer')
+                    self.adj_close = self.adj_close.merge(df, left_index=True, right_index=True, how='outer')
 
             except Exception as e:
-                print(f"Failed to download data for {ticker}: {e}")
+                print(f"Failed to download adj close values for {ticker}: {e}")
 
-        self.data.reset_index(inplace=True)
-
-    # ------------------------------
-
-    def calculate_beta(self, market_ticker='^GSPC'):
-        """
-        Calculate beta values for each ticker based on the specified market index.
-        """
-        try:
-            # Download market data (S&P 500)
-            market_data = yf.download(market_ticker, start=self.start_date, interval='1mo')['Adj Close'].copy()
-            market_data = market_data.pct_change().dropna()
-            market_data.rename('Market', inplace=True)
-
-            # Calculate log returns for each stock
-            returns_data = pd.DataFrame()
-
-            for ticker in self.tickers:
-                stock_returns = self.data[f'{ticker} CLOSE'].pct_change().dropna()
-                returns_data[ticker] = stock_returns
-
-            # Align data with market data
-            returns_data = returns_data.merge(market_data, left_index=True, right_index=True, how='inner')
-
-            # Calculate rolling beta values
-            for ticker in self.tickers:
-                rolling_cov = returns_data[ticker].rolling(window=12).cov(returns_data['Market'])
-                rolling_var_market = returns_data['Market'].rolling(window=12).var()
-                self.beta_values[ticker] = rolling_cov / rolling_var_market
-
-            self.beta_values.dropna(inplace=True)
-
-        except Exception as e:
-            print(f"Failed to calculate beta values: {e}")
+        self.adj_close.reset_index(inplace=True)
 
     # ------------------------------
 
-    def classify_cyclicality(self):
-        """
-        Classify each ticker as procyclical or anticyclical at each point in time based on beta values.
-        A stock is classified as:
-        - 'Anticyclical' if its beta at a specific point in time is between 0 and 0.7 (inclusive).
-        - 'Procyclical' if its beta at a specific point in time is greater than 0.7.
-        This classification is done for each time period individually.
-        """
+    def download_beta(self):
 
-        try:
-            # Define the classification function based on the beta for each time period
-            def label_beta_for_each_time(beta_value):
-                """
-                Classify an asset based on its beta at a specific point in time:
-                - 'Anticyclical' if the beta is between 0 and 0.7.
-                - 'Procyclical' if the beta is greater than 0.7.
-                """
-                if 0 <= beta_value <= 0.7:
-                    return 'Anticyclical'
-                elif beta_value > 0.7:
-                    return 'Procyclical'
+        def calculate_beta(ticker):
+            try:
+                if f'{ticker}_AC' not in self.adj_close.columns:
+                    return None
+
+                ticker_data = self.adj_close[[f'{ticker}_AC']].dropna()
+                
+                benchmark_ticker = '^GSPC'
+                benchmark_data = yf.download(benchmark_ticker, start=self.start_date, end=self.end_date, interval='1mo')[['Adj Close']].dropna()
+
+                if ticker_data.empty or benchmark_data.empty:
+                    return None
+
+                merged_data = ticker_data.join(benchmark_data, how='inner')
+                ticker_returns = merged_data[f'{ticker}_AC'].pct_change().dropna()
+                benchmark_returns = merged_data['Adj Close'].pct_change().dropna()
+
+                cov_matrix = ticker_returns.cov(benchmark_returns)
+                benchmark_var = benchmark_returns.var()
+
+                beta = cov_matrix / benchmark_var
+                return beta if isinstance(beta, (int, float)) else beta.values[0]
+
+            except Exception as e:
+                print(f"Failed to calculate beta for {ticker}: {e}")
+                return None
+
+        def fetch_beta(ticker):
+            try:
+                beta_info = yf.Ticker(ticker).info
+                beta = beta_info.get("beta", None)
+
+                if beta is None:
+                    calculated_beta = calculate_beta(ticker)
+                    if calculated_beta is not None:
+                        return {"Ticker": ticker, "Beta": calculated_beta}
+                    else:
+                        return {"Ticker": ticker, "Beta": None}
                 else:
-                    return 'Unclassified'  # Catch negative or undefined beta values.
+                    return {"Ticker": ticker, "Beta": beta}
 
-            # Apply the classification function to each beta value for each ticker at each time
-            self.cyclicality_labels = self.beta_values.applymap(label_beta_for_each_time)
+            except Exception as e:
+                print(f"Failed to download beta for {ticker}: {e}")
+                return {"Ticker": ticker, "Beta": None}
 
-        except Exception as e:
-            print(f"Failed to classify cyclicality: {e}")
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            betas = list(executor.map(fetch_beta, self.tickers))
+
+        self.beta = pd.DataFrame(betas)
+        self.beta = self.beta[self.beta['Beta'].notnull()]
 
     # ------------------------------
 
     def save_data(self, filepath):
-        """
-        Save the downloaded data, beta values, and cyclicality labels to an Excel file.
-        """
+
         try:
             directory = os.path.dirname(filepath)
             os.makedirs(directory, exist_ok=True)
 
             with pd.ExcelWriter(filepath) as writer:
-                self.data.to_excel(writer, index=False, sheet_name="Historical Data")
-                self.beta_values.to_excel(writer, sheet_name="Beta Values")
-                self.cyclicality_labels.to_excel(writer, sheet_name="Cyclicality Labels")
+                self.adj_close.to_excel(writer, index=False, sheet_name="adj_close")
 
+                if len(self.tickers) > 1:
+                    self.beta.to_excel(writer, index=False, sheet_name="beta")
             print(f"Data saved to {filepath}")
 
         except Exception as e:
@@ -386,23 +384,31 @@ class HistoricalDataDownloader:
 
 # --------------------------------------------------
 
-# Class to save different models to predict S&P 500 data
+# 
 class Models:
+
     def __init__(self, indicators_df, sp500_df):
+
         # Shift economic indicators to reflect predictive nature
         indicators_df = self._shift_indicators(indicators_df)
         
         # Combine economic indicators with historical S&P 500 data
         self.data = self._merge_data(indicators_df, sp500_df)
-        
+
+    # ------------------------------
+
     def _shift_indicators(self, indicators_df):
+
         # Shift indicators by 3 months to predict future S&P 500 movements
         indicators_df['CLI'] = indicators_df['CLI'].shift(3)
         indicators_df['BCI'] = indicators_df['BCI'].shift(3)
         indicators_df['CCI'] = indicators_df['CCI'].shift(3)
         return indicators_df
-        
+
+    # ------------------------------
+
     def _merge_data(self, indicators_df, sp500_df):
+
         # Convert 'Date' columns to datetime format
         indicators_df['Date'] = pd.to_datetime(indicators_df['Date'])
         sp500_df['Date'] = pd.to_datetime(sp500_df['Date'])
@@ -411,20 +417,22 @@ class Models:
         merged_data = pd.merge(indicators_df, sp500_df, on='Date', how='inner')
         
         # Create percentage change column for the S&P 500
-        merged_data['SP500_Change'] = merged_data['^GSPC CLOSE'].pct_change()
+        merged_data['SP500_Change'] = merged_data['^GSPC_AC'].pct_change()
         
         # Define the target column (1: overweight, 0: neutral, -1: underweight)
-        merged_data['Target'] = merged_data['SP500_Change'].apply(lambda x: 1 if x > 0.02 
-                                                                  else (-1 if x < -0.02 else 0))
+        merged_data['Target'] = merged_data['SP500_Change'].apply(lambda x: 1 if x > 0.02 else (-1 if x < -0.02 else 0))
         
         # Drop rows with any NaN values in the predictors or target columns
         merged_data.dropna(inplace=True)
         
         return merged_data
-    
+
+    # ------------------------------
+
     def train_logistic_regression(self):
+
         # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data) and the target variable (Target)
-        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
+        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_AC']]
         y = self.data['Target']
         
         # Split the dataset into training and testing sets (80% training, 20% testing)
@@ -453,10 +461,13 @@ class Models:
         self.lr_y_pred = y_pred
         
         return accuracy, report
-    
+
+    # ------------------------------
+
     def train_mlp(self, activation='relu'):
+
         # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data) and the target variable (Target)
-        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC CLOSE']]
+        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_AC']]
         y = self.data['Target']
         
         # Scale data using StandardScaler for better neural network performance
@@ -477,7 +488,6 @@ class Models:
             learning_rate_init=0.0005,         # Reducir la tasa de aprendizaje para ajustes más finos
             random_state=42                    # Fijar la semilla para replicabilidad
         )
-
         
         self.mlp_model.fit(X_train, y_train)
         
@@ -494,21 +504,12 @@ class Models:
         self.mlp_y_pred = y_pred
         
         return accuracy, report
-    
+
+    # ------------------------------
+
     def download_sp500_data(self):
+
         # Download historical data for S&P 500 from Yahoo Finance
         sp500_data = yf.download('^GSPC', start='2010-01-01', end='2024-07-01')
         sp500_data.reset_index(inplace=True)
         return sp500_data
-    
-    def download_economic_data(self):
-        # Download economic indicators from appropriate API (to be implemented)
-        pass
-
-
-
-
-
-# --------------------------------------------------
-
-# NOTAS
