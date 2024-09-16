@@ -80,14 +80,14 @@ print(lr_report)
 
 # ----------
 
-# TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH ReLU ACTIVATION
+# TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH RELU ACTIVATION
 mlp_accuracy_relu, mlp_report_relu = M_model.train_mlp(activation='relu')
 print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
 print(mlp_report_relu)
 
 # ----------
 
-# TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH tanh ACTIVATION
+# TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH TANH ACTIVATION
 mlp_accuracy_tanh, mlp_report_tanh = M_model.train_mlp(activation='tanh')
 print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
 print(mlp_report_tanh)
