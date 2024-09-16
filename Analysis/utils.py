@@ -24,8 +24,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.model_selection import train_test_split, GridSearchCV
 
 # ------------------------------
 
@@ -434,8 +434,7 @@ class Models:
         model_data['^GSPC_R'] = model_data['^GSPC_AC'].pct_change().dropna()
         model_data['Y'] = model_data['^GSPC_R'].apply(lambda x: 1 if x > 0.02 else (-1 if x < -0.02 else 0))
         model_data = model_data.dropna()
-        model_data = model_data.shift(-1)
-        model_data = model_data.dropna()
+        model_data = model_data.shift(-1).dropna()
 
         return model_data
 
