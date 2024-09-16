@@ -13,18 +13,21 @@
 
 # LIBRARIES
 import pandas as pd
-from utils import Models
+from utils import Models as M
 from utils import EDA_comparison as EDAC
 from utils import HistoricalDataDownloader as HDD
 
-
 # --------------------------------------------------
 
-# INITIALIZE HDD FOR THE BENCHMARK
+# TICKER FOR THE BENCHMARK
 benchmark = ['^GSPC']
-HDD_sp500 = HDD(tickers=benchmark)
-HDD_sp500.download_adj_close()
-HDD_sp500.save_data(filepath="Data/sp500_data.xlsx")
+
+# ----------
+
+# INITIALIZE HDD FOR THE BENCHMARK
+# HDD_sp500 = HDD(tickers=benchmark)
+# HDD_sp500.download_adj_close()
+# HDD_sp500.save_data(filepath="Data/sp500_data.xlsx")
 
 # ------------------------------
 
@@ -43,7 +46,7 @@ sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 # READ S&P 500 ASSETS LIST
 assets = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]["Symbol"].tolist()
 
-# ------------------------------
+# ----------
 
 # INITIALIZE HDD FOR THE S&P 500 ASSETS
 # HDD_assets = HDD(tickers=assets)
@@ -60,39 +63,45 @@ assets_beta_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="beta")
 # --------------------------------------------------
 
 # INITIALIZE THE MODELS CLASS WITH ECONOMIC INDICATORS AND S&P 500 DATA
-model = Models(economic_indicators_data, sp500_data)
+M_model = M(sp500_data, economic_indicators_data)
+# M_model.save_data('Data/model_data.xlsx')
+
+# ------------------------------
+
+# READ MODEL DATA
+model_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="adj_close")
 
 # ------------------------------
 
 # TRAIN LOGISTIC REGRESSION MODEL
-lr_accuracy, lr_report = model.train_logistic_regression()
+lr_accuracy, lr_report = M_model.train_logistic_regression()
 print("Logistic Regression Accuracy:", lr_accuracy)
 print(lr_report)
 
 # ----------
 
 # TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH ReLU ACTIVATION
-mlp_accuracy_relu, mlp_report_relu = model.train_mlp(activation='relu')
+mlp_accuracy_relu, mlp_report_relu = M_model.train_mlp(activation='relu')
 print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
 print(mlp_report_relu)
 
 # ----------
 
 # TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH tanh ACTIVATION
-mlp_accuracy_tanh, mlp_report_tanh = model.train_mlp(activation='tanh')
+mlp_accuracy_tanh, mlp_report_tanh = M_model.train_mlp(activation='tanh')
 print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
 print(mlp_report_tanh)
 
 # ----------
 
 # TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH LOGISTIC ACTIVATION
-mlp_accuracy_logistic, mlp_report_logistic = model.train_mlp(activation='logistic')
+mlp_accuracy_logistic, mlp_report_logistic = M_model.train_mlp(activation='logistic')
 print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
 print(mlp_report_logistic)
 
 # --------------------------------------------------
 
 # Entrenar el modelo XGBoost y obtener el reporte
-accuracy, report = model.train_xgboost()
-print(f"Accuracy XGBOOST: {accuracy}")
-print(f"Classification Report XGBOOST:\n{report}")
+# accuracy, report = M_model.train_xgboost()
+# print(f"Accuracy XGBOOST: {accuracy}")
+# print(f"Classification Report XGBOOST:\n{report}")

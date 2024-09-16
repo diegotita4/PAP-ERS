@@ -19,13 +19,13 @@ import seaborn as sns
 import yfinance as yf
 import matplotlib.pyplot as plt
 from scipy import stats
+from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import classification_report, accuracy_score
-from xgboost import XGBClassifier
 
 # ------------------------------
 
@@ -38,6 +38,7 @@ sns.set(style="whitegrid")
 class EDA_comparison:
 
     def __init__(self, sp500_data, economic_indicators_data, date_column='Date', columns_to_analyze=None):
+
         self.sp500_data = sp500_data
         self.economic_indicators_data = economic_indicators_data
         self.date_column = date_column
@@ -63,7 +64,10 @@ class EDA_comparison:
     def data_summary(self):
 
         print("First few rows of the data:")
-        print(self.merged_data.head(10))
+        print(self.merged_data.head(12))
+
+        print("Last few rows of the data:")
+        print(self.merged_data.tail(5))
 
         print("\nInformation:")
         print(self.merged_data.info())
@@ -315,54 +319,82 @@ class HistoricalDataDownloader:
     def download_beta(self):
 
         def calculate_beta(ticker):
+
             try:
                 if f'{ticker}_AC' not in self.adj_close.columns:
+                    print(f"{ticker} not in adj_close columns")
                     return None
 
-                ticker_data = self.adj_close[[f'{ticker}_AC']].dropna()
-                
+                ticker_data = self.adj_close[['Date', f'{ticker}_AC']].dropna()
+                ticker_data.set_index('Date', inplace=True)
+
                 benchmark_ticker = '^GSPC'
                 benchmark_data = yf.download(benchmark_ticker, start=self.start_date, end=self.end_date, interval='1mo')[['Adj Close']].dropna()
+                benchmark_data.index.name = 'Date'
+                benchmark_data.reset_index(inplace=True)
 
                 if ticker_data.empty or benchmark_data.empty:
+                    print(f"No data for {ticker} or benchmark")
                     return None
 
-                merged_data = ticker_data.join(benchmark_data, how='inner')
+                merged_data = ticker_data.join(benchmark_data.set_index('Date'), how='inner', on='Date')
                 ticker_returns = merged_data[f'{ticker}_AC'].pct_change().dropna()
                 benchmark_returns = merged_data['Adj Close'].pct_change().dropna()
 
+                if len(ticker_returns) < 2 or len(benchmark_returns) < 2:
+                    print(f"Not enough data for {ticker}")
+                    return None
+
                 cov_matrix = ticker_returns.cov(benchmark_returns)
                 benchmark_var = benchmark_returns.var()
-
                 beta = cov_matrix / benchmark_var
+
                 return beta if isinstance(beta, (int, float)) else beta.values[0]
 
             except Exception as e:
                 print(f"Failed to calculate beta for {ticker}: {e}")
                 return None
 
+        # ----------
+
         def fetch_beta(ticker):
+
             try:
+                if f'{ticker}_AC' not in self.adj_close.columns:
+                    return {"Ticker": ticker, "Beta": None}
+
                 beta_info = yf.Ticker(ticker).info
                 beta = beta_info.get("beta", None)
 
                 if beta is None:
                     calculated_beta = calculate_beta(ticker)
+
                     if calculated_beta is not None:
                         return {"Ticker": ticker, "Beta": calculated_beta}
+
                     else:
                         return {"Ticker": ticker, "Beta": None}
+
                 else:
                     return {"Ticker": ticker, "Beta": beta}
 
             except Exception as e:
-                print(f"Failed to download beta for {ticker}: {e}")
+                print(f"Failed to fetch beta for {ticker}: {e}")
                 return {"Ticker": ticker, "Beta": None}
+
+        # ----------
 
         with ThreadPoolExecutor(max_workers=10) as executor:
             betas = list(executor.map(fetch_beta, self.tickers))
 
         self.beta = pd.DataFrame(betas)
+        
+        valid_tickers = self.beta[self.beta['Beta'].notnull()]['Ticker'].tolist()
+
+        for ticker in self.adj_close.columns:
+            if ticker.endswith('_AC') and ticker[:-3] not in valid_tickers:
+                self.adj_close.drop(columns=ticker, inplace=True)
+        
         self.beta = self.beta[self.beta['Beta'].notnull()]
 
     # ------------------------------
@@ -388,164 +420,121 @@ class HistoricalDataDownloader:
 # 
 class Models:
 
-    def __init__(self, indicators_df, sp500_df):
+    def __init__(self, sp500_data, economic_indicators_data):
 
-        # Shift economic indicators to reflect predictive nature
-        indicators_df = self._shift_indicators(indicators_df)
-        
-        # Combine economic indicators with historical S&P 500 data
-        self.data = self._merge_data(indicators_df, sp500_df)
+        self.economic_indicators_data = economic_indicators_data
+        self.sp500_data = sp500_data
+        self.model_data = self.model_data_function(self.economic_indicators_data, self.sp500_data)
 
     # ------------------------------
 
-    def _shift_indicators(self, indicators_df):
+    def model_data_function(self, economic_indicators_data, sp500_data):
 
-        # Shift indicators by 3 months to predict future S&P 500 movements
-        indicators_df['CLI'] = indicators_df['CLI'].shift(3)
-        indicators_df['BCI'] = indicators_df['BCI'].shift(3)
-        indicators_df['CCI'] = indicators_df['CCI'].shift(3)
-        return indicators_df
+        model_data = pd.merge(economic_indicators_data, sp500_data, on='Date', how='inner')
+        model_data['^GSPC_R'] = model_data['^GSPC_AC'].pct_change().dropna()
+        model_data['Y'] = model_data['^GSPC_R'].apply(lambda x: 1 if x > 0.02 else (-1 if x < -0.02 else 0))
+        model_data = model_data.dropna()
+        model_data = model_data.shift(-1)
+        model_data = model_data.dropna()
 
-    # ------------------------------
-
-    def _merge_data(self, indicators_df, sp500_df):
-
-        # Convert 'Date' columns to datetime format
-        indicators_df['Date'] = pd.to_datetime(indicators_df['Date'])
-        sp500_df['Date'] = pd.to_datetime(sp500_df['Date'])
-        
-        # Merge both datasets based on 'Date'
-        merged_data = pd.merge(indicators_df, sp500_df, on='Date', how='inner')
-        
-        # Create percentage change column for the S&P 500
-        merged_data['SP500_Change'] = merged_data['^GSPC_AC'].pct_change()
-        
-        # Define the target column (1: overweight, 0: neutral, -1: underweight)
-        merged_data['Target'] = merged_data['SP500_Change'].apply(lambda x: 1 if x > 0.02 else (-1 if x < -0.02 else 0))
-        
-        # Drop rows with any NaN values in the predictors or target columns
-        merged_data.dropna(inplace=True)
-        
-        return merged_data
+        return model_data
 
     # ------------------------------
 
     def train_logistic_regression(self):
 
-        # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data) and the target variable (Target)
-        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_AC']]
-        y = self.data['Target']
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y']
         
-        # Split the dataset into training and testing sets (80% training, 20% testing)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
         
-        # Train the logistic regression model with adjusted hyperparameters
         self.lr_model = LogisticRegression(
-            solver='saga',   # You can experiment with 'saga' or other solvers
-            C=0.3,                # Regularization strength (smaller values = stronger regularization)
-            penalty='l2',          # Regularization type (l1, l2, or elasticnet)
-            class_weight='balanced' # Handle class imbalance
+            solver='saga',
+            C=0.3,
+            penalty='l2',
+            class_weight='balanced'
         )
         
         self.lr_model.fit(X_train, y_train)
         
-        # Make predictions on the test set
         y_pred = self.lr_model.predict(X_test)
-        
-        # Calculate accuracy and classification report
+
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
         
-        # Save test data and predictions
         self.X_test = X_test
         self.y_test = y_test
         self.lr_y_pred = y_pred
         
         return accuracy, report
-    
 
     # ------------------------------
 
     def train_xgboost(self):
-        # Define features and target
-        X = self.data[['CLI', 'BCI', 'CCI', '^GSPC_AC', 'SP500_Change']]
-        y = self.data['Target']
 
-        # Split the data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y']
 
-        # Initialize the XGBoost classifier with default parameters
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+
         model = XGBClassifier(use_label_encoder=False, eval_metric='mlogloss')
 
-        # Define the grid of hyperparameters to search
         param_grid = {
-            'n_estimators': [100, 200, 300],      # Number of trees
-            'learning_rate': [0.01, 0.1, 0.3],    # Learning rate
-            'max_depth': [3, 5, 7],               # Maximum depth of trees
-            'subsample': [0.6, 0.8, 1.0],         # Fraction of samples to use for each tree
-            'colsample_bytree': [0.6, 0.8, 1.0],  # Fraction of features to use for each tree
-            'gamma': [0, 0.1, 0.5]                # Minimum loss reduction for making a split
+            'n_estimators': [100, 200, 300],
+            'learning_rate': [0.01, 0.1, 0.3],
+            'max_depth': [3, 5, 7],
+            'subsample': [0.6, 0.8, 1.0],
+            'colsample_bytree': [0.6, 0.8, 1.0],
+            'gamma': [0, 0.1, 0.5]
         }
 
-        # Use GridSearchCV to find the best hyperparameters
         grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='accuracy', verbose=1)
         grid_search.fit(X_train, y_train)
 
-        # Save the best model
         self.xgb_model = grid_search.best_estimator_
 
-        # Predict using the best model found by GridSearchCV
         y_pred = self.xgb_model.predict(X_test)
 
-        # Evaluate the model
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
 
-        # Save test data and predictions
         self.X_test = X_test
         self.y_test = y_test
         self.xgb_y_pred = y_pred
 
         print(f"Best hyperparameters: {grid_search.best_params_}")
+
         return accuracy, report
 
     # ------------------------------
 
     def train_mlp(self, activation='relu'):
 
-        # Define predictor variables (CLI, BCI, GDP, CCI, and S&P 500 historical data) and the target variable (Target)
-        X = self.data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_AC']]
-        y = self.data['Target']
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y']
         
-        # Scale data using StandardScaler for better neural network performance
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
-        # Split the dataset into training and testing sets (80% training, 20% testing)
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0)
         
-        # Train a Multi-Layer Perceptron (MLP) Neural Network
-        # Modificación en el constructor del MLPClassifier para mejorar el rendimiento
         self.mlp_model = MLPClassifier(
-            hidden_layer_sizes=(128, 64, 32),  # Aumento en el número de neuronas en las capas ocultas
-            max_iter=1500,                     # Incrementar el número de iteraciones para mayor convergencia
-            activation='relu',                 # Mantener ReLU como función de activación
-            solver='adam',                     # Adam es un buen optimizador por defecto
-            alpha=0.005,                       # Aumentar ligeramente la regularización para mejorar la generalización
-            learning_rate_init=0.0005,         # Reducir la tasa de aprendizaje para ajustes más finos
-            random_state=42                    # Fijar la semilla para replicabilidad
+            hidden_layer_sizes=(128, 64, 32),
+            max_iter=1500,
+            activation=activation,
+            solver='adam',
+            alpha=0.005,
+            learning_rate_init=0.0005,
+            random_state=0
         )
         
         self.mlp_model.fit(X_train, y_train)
         
-        # Make predictions on the test set
         y_pred = self.mlp_model.predict(X_test)
         
-        # Calculate accuracy and classification report
         accuracy = accuracy_score(y_test, y_pred)
-        report = classification_report(y_test, y_pred)
+        report = classification_report(y_test, y_pred, zero_division=1)
         
-        # Save test data and predictions
         self.X_test = X_test
         self.y_test = y_test
         self.mlp_y_pred = y_pred
@@ -554,9 +543,16 @@ class Models:
 
     # ------------------------------
 
-    def download_sp500_data(self):
+    def save_data(self, filepath):
 
-        # Download historical data for S&P 500 from Yahoo Finance
-        sp500_data = yf.download('^GSPC', start='2010-01-01', end='2024-07-01')
-        sp500_data.reset_index(inplace=True)
-        return sp500_data
+        try:
+            directory = os.path.dirname(filepath)
+            os.makedirs(directory, exist_ok=True)
+
+            with pd.ExcelWriter(filepath) as writer:
+                self.model_data.to_excel(writer, index=False, sheet_name="model_data")
+                
+            print(f"Data saved to {filepath}")
+
+        except Exception as e:
+            print(f"Failed to save data: {e}")
