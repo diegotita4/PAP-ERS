@@ -52,6 +52,7 @@ assets = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
 # HDD_assets = HDD(tickers=assets)
 # HDD_assets.download_adj_close()
 # HDD_assets.download_beta()
+# HDD_assets.classify_beta()
 # HDD_assets.save_data(filepath="Data/assets_data.xlsx")
 
 # ------------------------------
@@ -62,9 +63,14 @@ assets_beta_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="beta")
 
 # --------------------------------------------------
 
+# UMBRAL
+umbral = 0.02
+
+# ----------
+
 # INITIALIZE THE MODELS CLASS WITH ECONOMIC INDICATORS AND S&P 500 DATA
-M_model = M(sp500_data, economic_indicators_data)
-# M_model.save_data('Data/model_data.xlsx')
+M_model = M(sp500_data, economic_indicators_data, umbral)
+M_model.save_data('Data/model_data.xlsx')
 
 # ------------------------------
 
@@ -101,7 +107,7 @@ print(mlp_report_logistic)
 
 # --------------------------------------------------
 
-# Entrenar el modelo XGBoost y obtener el reporte
-# accuracy, report = M_model.train_xgboost()
-# print(f"Accuracy XGBOOST: {accuracy}")
-# print(f"Classification Report XGBOOST:\n{report}")
+# TRAIN XGBOOST MODEL
+accuracy, report = M_model.train_xgboost()
+print(f"Accuracy XGBOOST: {accuracy}")
+print(f"Classification Report XGBOOST:\n{report}")

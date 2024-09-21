@@ -25,7 +25,7 @@ from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 
 # ------------------------------
 
@@ -345,9 +345,9 @@ class HistoricalDataDownloader:
                     print(f"Not enough data for {ticker}")
                     return None
 
-                cov_matrix = ticker_returns.cov(benchmark_returns)
+                cov_value = ticker_returns.cov(benchmark_returns)
                 benchmark_var = benchmark_returns.var()
-                beta = cov_matrix / benchmark_var
+                beta = cov_value / benchmark_var
 
                 return beta if isinstance(beta, (int, float)) else beta.values[0]
 
@@ -399,6 +399,15 @@ class HistoricalDataDownloader:
 
     # ------------------------------
 
+    def classify_beta(self):
+
+        bins = [-np.inf, 0.7, np.inf]
+        labels = ['0', '1']
+
+        self.beta['Nature'] = pd.cut(self.beta['Beta'], bins=bins, labels=labels)
+
+    # ------------------------------
+
     def save_data(self, filepath):
 
         try:
@@ -420,19 +429,20 @@ class HistoricalDataDownloader:
 # 
 class Models:
 
-    def __init__(self, sp500_data, economic_indicators_data):
+    def __init__(self, sp500_data, economic_indicators_data, umbral):
 
         self.economic_indicators_data = economic_indicators_data
         self.sp500_data = sp500_data
-        self.model_data = self.model_data_function(self.economic_indicators_data, self.sp500_data)
+        self.umbral = umbral
+        self.model_data = self.model_data_function(self.economic_indicators_data, self.sp500_data, self.umbral)
 
     # ------------------------------
 
-    def model_data_function(self, economic_indicators_data, sp500_data):
+    def model_data_function(self, economic_indicators_data, sp500_data, umbral):
 
         model_data = pd.merge(economic_indicators_data, sp500_data, on='Date', how='inner')
         model_data['^GSPC_R'] = model_data['^GSPC_AC'].pct_change().dropna()
-        model_data['Y'] = model_data['^GSPC_R'].apply(lambda x: 1 if x > 0.02 else (-1 if x < -0.02 else 0))
+        model_data['Y'] = model_data['^GSPC_R'].apply(lambda x: 1 if x > umbral else (-1 if x < -umbral else 0))
         model_data = model_data.dropna()
         model_data = model_data.shift(-1).dropna()
 
@@ -472,13 +482,13 @@ class Models:
     def train_xgboost(self):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
-        y = self.model_data['Y']
+        y = self.model_data['Y'] + 1
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
 
         model = XGBClassifier(use_label_encoder=False, eval_metric='mlogloss')
 
-        param_grid = {
+        param_distributions = {
             'n_estimators': [100, 200, 300],
             'learning_rate': [0.01, 0.1, 0.3],
             'max_depth': [3, 5, 7],
@@ -487,21 +497,23 @@ class Models:
             'gamma': [0, 0.1, 0.5]
         }
 
-        grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='accuracy', verbose=1)
-        grid_search.fit(X_train, y_train)
+        randomized_search = RandomizedSearchCV(estimator=model, param_distributions=param_distributions, cv=5, scoring='accuracy', verbose=1, n_jobs=-1, n_iter=100)
+        randomized_search.fit(X_train, y_train)
 
-        self.xgb_model = grid_search.best_estimator_
+        self.xgb_model = randomized_search.best_estimator_
 
         y_pred = self.xgb_model.predict(X_test)
 
-        accuracy = accuracy_score(y_test, y_pred)
-        report = classification_report(y_test, y_pred)
+        y_pred_original = y_pred - 1
+
+        accuracy = accuracy_score(y_test, y_pred_original)
+        report = classification_report(y_test - 1, y_pred_original)
 
         self.X_test = X_test
         self.y_test = y_test
         self.xgb_y_pred = y_pred
 
-        print(f"Best hyperparameters: {grid_search.best_params_}")
+        print(f"Best hyperparameters: {randomized_search.best_params_}")
 
         return accuracy, report
 
