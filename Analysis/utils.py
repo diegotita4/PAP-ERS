@@ -567,3 +567,30 @@ class Models:
 
         except Exception as e:
             print(f"Failed to save data: {e}")
+
+# --------------------------------------------------
+
+# 
+class DynamicBacktesting:
+
+    def __init__(self):
+
+        return
+
+    # ------------------------------
+
+    def first_function(self):
+
+        return
+
+ # ------------------------------
+
+    def second_function(self):
+
+        return
+
+ # ------------------------------
+
+    def third_function(self):
+
+        return

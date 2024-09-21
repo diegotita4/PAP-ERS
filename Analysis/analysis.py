@@ -14,8 +14,9 @@
 # LIBRARIES
 import pandas as pd
 from utils import Models as M
-from utils import EDA_comparison as EDAC
+from utils import EDA_comparison as EDA
 from utils import HistoricalDataDownloader as HDD
+from utils import DynamicBacktesting as DBT
 
 # --------------------------------------------------
 
@@ -38,8 +39,8 @@ sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 # --------------------------------------------------
 
 # PERFORM EDA COMPARISON
-# eda_comparison = EDAC(sp500_data, economic_indicators_data)
-# eda_comparison.perform_EDA_comparison()
+# EDA_comparison = EDA(sp500_data, economic_indicators_data)
+# EDA_comparison.perform_EDA_comparison()
 
 # --------------------------------------------------
 
@@ -105,9 +106,22 @@ mlp_accuracy_logistic, mlp_report_logistic = M_model.train_mlp(activation='logis
 print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
 print(mlp_report_logistic)
 
-# --------------------------------------------------
+# ----------
 
 # TRAIN XGBOOST MODEL
 accuracy, report = M_model.train_xgboost()
 print(f"Accuracy XGBOOST: {accuracy}")
 print(f"Classification Report XGBOOST:\n{report}")
+
+# ------------------------------
+
+# 
+
+
+# --------------------------------------------------
+
+# INITIALIZE THE DYNAMIC BACKTESTING CLASS
+#DBT_dynback = DBT()
+#DBT_dynback.first_function()
+#DBT_dynback.second_function()
+#DBT_dynback.third_function()
