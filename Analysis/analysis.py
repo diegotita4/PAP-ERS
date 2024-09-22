@@ -115,9 +115,13 @@ print(f"Classification Report XGBOOST:\n{report}")
 
 # ------------------------------
 
-# 
+# TRAIN WITH HIPERPARAMETERS MODEL MLP 
+M_model.optimize_mlp_with_optuna(n_trials=50)
 
+# ------------------------------
 
+# TRAIN WITH HIPERPARAMETERS XGBOOST
+M_model.optimize_xgboost_with_optuna(n_trials=50)
 # --------------------------------------------------
 
 # INITIALIZE THE DYNAMIC BACKTESTING CLASS
