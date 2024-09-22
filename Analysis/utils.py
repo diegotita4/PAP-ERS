@@ -518,6 +518,56 @@ class Models:
         print(f"Best hyperparameters: {randomized_search.best_params_}")
 
         return accuracy, report
+    # ------------------------------
+    def optimize_xgboost_with_optuna(self, n_trials=50):
+        def objective(trial):
+            params = {
+                'verbosity': 0,
+                'objective': 'multi:softmax',
+                'num_class': 3,
+                'eval_metric': 'mlogloss',
+                'eta': trial.suggest_float('eta', 0.01, 0.3),
+                'max_depth': trial.suggest_int('max_depth', 3, 9),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'lambda': trial.suggest_float('lambda', 1e-8, 1.0, log=True),
+                'alpha': trial.suggest_float('alpha', 1e-8, 1.0, log=True)
+            }
+            
+            X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+            y = self.model_data['Y'] + 1
+            
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0)
+            
+            model = XGBClassifier(**params, use_label_encoder=False)
+            model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+            
+            preds = model.predict(X_val)
+            accuracy = accuracy_score(y_val, preds)
+            return accuracy
+
+        self.study_xgb = optuna.create_study(direction='maximize')
+        self.study_xgb.optimize(objective, n_trials=n_trials)
+        
+        # Train the best model
+        self.train_and_save_best_xgboost()
+    
+    def train_and_save_best_xgboost(self):
+        # Re-train the model with the best hyperparameters
+        best_params = self.study_xgb.best_params
+        
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y'] + 1
+        
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+        
+        self.xgb_model = XGBClassifier(**best_params, use_label_encoder=False)
+        self.xgb_model.fit(X_train, y_train)
+        
+        # Save the model
+        joblib.dump(self.xgb_model, 'best_xgb_model.pkl')
+        print("Best XGBoost model saved as 'best_xgb_model.pkl'")
+
 
     # ------------------------------
 
@@ -553,6 +603,74 @@ class Models:
         self.mlp_y_pred = y_pred
         
         return accuracy, report
+    
+    # ------------------------------
+
+    def optimize_mlp_with_optuna(self, n_trials=50):
+        def objective(trial):
+            # Suggest hyperparameters
+            hidden_layer_sizes = tuple([trial.suggest_int(f'n_units_l{i}', 16, 128) for i in range(3)])
+            alpha = trial.suggest_loguniform('alpha', 1e-5, 1e-1)
+            learning_rate_init = trial.suggest_loguniform('learning_rate_init', 1e-5, 1e-1)
+            
+            # Data preprocessing
+            X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+            y = self.model_data['Y']
+            
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, random_state=0)
+            
+            # Model training
+            model = MLPClassifier(
+                hidden_layer_sizes=hidden_layer_sizes,
+                max_iter=1500,
+                activation='relu',
+                solver='adam',
+                alpha=alpha,
+                learning_rate_init=learning_rate_init,
+                random_state=0
+            )
+            
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_val)
+            accuracy = accuracy_score(y_val, y_pred)
+            return accuracy
+
+        self.study_mlp = optuna.create_study(direction='maximize')
+        self.study_mlp.optimize(objective, n_trials=n_trials)
+        
+        # Train the best model
+        self.train_and_save_best_mlp()
+    
+    def train_and_save_best_mlp(self):
+        # Re-train the model with the best hyperparameters
+        best_params = self.study_mlp.best_params
+        hidden_layer_sizes = tuple([best_params[f'n_units_l{i}'] for i in range(3)])
+        
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y']
+        
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0)
+        
+        self.mlp_model = MLPClassifier(
+            hidden_layer_sizes=hidden_layer_sizes,
+            max_iter=1500,
+            activation='relu',
+            solver='adam',
+            alpha=best_params['alpha'],
+            learning_rate_init=best_params['learning_rate_init'],
+            random_state=0
+        )
+        
+        self.mlp_model.fit(X_train, y_train)
+        
+        # Save the model
+        joblib.dump(self.mlp_model, 'best_mlp_model.pkl')
+        print("Best MLP model saved as 'best_mlp_model.pkl'")
+
 
     # ------------------------------
 
