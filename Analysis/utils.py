@@ -572,12 +572,12 @@ class Models:
 
     # ------------------------------
 
-    def train_logistic_regression(self):
+    def logistic_regression(self):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
         
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
         
         self.lr_model = LogisticRegression(
             solver='saga',
@@ -592,21 +592,24 @@ class Models:
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
-        
-        self.X_test = X_test
-        self.y_test = y_test
-        self.lr_y_pred = y_pred
-        
-        return accuracy, report
+
+        print('\n-------------------')
+        print('LOGISTIC REGRESSION')
+        print('-------------------')
+        print(f"\nAccuracy: {accuracy:.4f}")
+        print("\nClassification Report:")
+        print(report)
+
+        return self.lr_model
 
     # ------------------------------
 
-    def train_xgboost(self):
+    def XGBoost(self):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y'] + 1
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
 
         model = XGBClassifier(use_label_encoder=False, eval_metric='mlogloss')
 
@@ -631,17 +634,13 @@ class Models:
         accuracy = accuracy_score(y_test, y_pred_original)
         report = classification_report(y_test - 1, y_pred_original)
 
-        self.X_test = X_test
-        self.y_test = y_test
-        self.xgb_y_pred = y_pred
-
         print(f"Best hyperparameters: {randomized_search.best_params_}")
 
         return accuracy, report
 
     # ------------------------------
 
-    def optimize_xgboost_with_optuna(self, n_trials=50):
+    def optimize_XGBoost_with_optuna(self, n_trials=50):
 
         def objective(trial):
 
@@ -661,7 +660,7 @@ class Models:
             X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
             y = self.model_data['Y'] + 1
 
-            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0)
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
 
             model = XGBClassifier(**params, use_label_encoder=False)
             model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
@@ -680,14 +679,14 @@ class Models:
 
     # ------------------------------
 
-    def train_and_save_best_xgboost(self):
+    def train_and_save_best_XGBoost(self):
 
         best_params = self.study_xgb.best_params
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y'] + 1
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
 
         self.xgb_model = XGBClassifier(**best_params, use_label_encoder=False)
         self.xgb_model.fit(X_train, y_train)
@@ -697,7 +696,7 @@ class Models:
 
     # ------------------------------
 
-    def train_mlp(self, activation='relu'):
+    def MLP(self, activation='relu'):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
@@ -705,7 +704,7 @@ class Models:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0, stratify=y)
 
         self.mlp_model = MLPClassifier(
             hidden_layer_sizes=(128, 64, 32),
@@ -724,15 +723,11 @@ class Models:
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred, zero_division=1)
 
-        self.X_test = X_test
-        self.y_test = y_test
-        self.mlp_y_pred = y_pred
-
         return accuracy, report
 
     # ------------------------------
 
-    def optimize_mlp_with_optuna(self, n_trials=50):
+    def optimize_MLP_with_optuna(self, n_trials=50):
 
         def objective(trial):
 
@@ -745,7 +740,7 @@ class Models:
 
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
-            X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, random_state=0)
+            X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, random_state=0, stratify=y)
 
             model = MLPClassifier(
                 hidden_layer_sizes=hidden_layer_sizes,
@@ -772,7 +767,7 @@ class Models:
 
     # ------------------------------
 
-    def train_and_save_best_mlp(self):
+    def train_and_save_best_MLP(self):
 
         best_params = self.study_mlp.best_params
         hidden_layer_sizes = tuple([best_params[f'n_units_l{i}'] for i in range(3)])
@@ -782,7 +777,7 @@ class Models:
 
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0, stratify=y)
 
         self.mlp_model = MLPClassifier(
             hidden_layer_sizes=hidden_layer_sizes,

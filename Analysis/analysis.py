@@ -71,7 +71,7 @@ umbral = 0.02
 
 # INITIALIZE THE MODELS CLASS WITH ECONOMIC INDICATORS AND S&P 500 DATA
 M_model = M(sp500_data, economic_indicators_data, umbral)
-M_model.save_data('Data/model_data.xlsx')
+#M_model.save_data('Data/model_data.xlsx')
 
 # ------------------------------
 
@@ -81,35 +81,33 @@ model_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="adj_close")
 # ------------------------------
 
 # TRAIN LOGISTIC REGRESSION MODEL
-lr_accuracy, lr_report = M_model.train_logistic_regression()
-print("Logistic Regression Accuracy:", lr_accuracy)
-print(lr_report)
+lr_model = M_model.logistic_regression()
 
 # ----------
 
 # TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH RELU ACTIVATION
-mlp_accuracy_relu, mlp_report_relu = M_model.train_mlp(activation='relu')
+mlp_accuracy_relu, mlp_report_relu = M_model.MLP(activation='relu')
 print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
 print(mlp_report_relu)
 
 # ----------
 
 # TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH TANH ACTIVATION
-mlp_accuracy_tanh, mlp_report_tanh = M_model.train_mlp(activation='tanh')
+mlp_accuracy_tanh, mlp_report_tanh = M_model.MLP(activation='tanh')
 print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
 print(mlp_report_tanh)
 
 # ----------
 
 # TRAIN MULTILAYER PERCEPTRON (MLP) NEURAL NETWORK WITH LOGISTIC ACTIVATION
-mlp_accuracy_logistic, mlp_report_logistic = M_model.train_mlp(activation='logistic')
+mlp_accuracy_logistic, mlp_report_logistic = M_model.MLP(activation='logistic')
 print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
 print(mlp_report_logistic)
 
 # ----------
 
 # TRAIN XGBOOST MODEL
-accuracy, report = M_model.train_xgboost()
+accuracy, report = M_model.XGBoost()
 print(f"Accuracy XGBOOST: {accuracy}")
 print(f"Classification Report XGBOOST:\n{report}")
 
