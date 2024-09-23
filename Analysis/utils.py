@@ -31,15 +31,36 @@ from sklearn.model_selection import train_test_split, RandomizedSearchCV
 
 # ------------------------------
 
-# 
+# SET THE STYLE FOR SEABORN VISUALIZATIONS
 sns.set(style="whitegrid")
 
 # --------------------------------------------------
 
-# 
+# CLASS FOR PERFORMING EXPLORATOY DATA ANALYSIS (EDA) ON ECONOMIC INDICATORS AND S&P 500 DATA
 class EDA_comparison:
+    """
+    Class for performing exploratory data analysis (EDA) on economic indicators 
+    and S&P 500 data. Allows visualization and summarization of merged data.
+
+    Attributes:
+        sp500_data (DataFrame): S&P 500 data.
+        economic_indicators_data (DataFrame): Economic indicators data.
+        date_column (str): Name of the column containing dates.
+        columns_to_analyze (list): List of columns to analyze. If None, all are analyzed.
+        indicators_colors (dict): Mapping of colors for economic indicators.
+        merged_data (DataFrame): Merged data of S&P 500 and economic indicators.
+    """
 
     def __init__(self, sp500_data, economic_indicators_data, date_column='Date', columns_to_analyze=None):
+        """
+        Initializes the EDA_comparison class.
+
+        Args:
+            sp500_data (DataFrame): S&P 500 data.
+            economic_indicators_data (DataFrame): Economic indicators data.
+            date_column (str): Name of the column containing dates. Defaults to 'Date'.
+            columns_to_analyze (list): List of columns to analyze. If None, all are analyzed.
+        """
 
         self.sp500_data = sp500_data
         self.economic_indicators_data = economic_indicators_data
@@ -64,6 +85,14 @@ class EDA_comparison:
     # ------------------------------
 
     def data_summary(self):
+        """
+        Displays a summary of the merged dataset, including:
+        - The first and last few rows of the DataFrame.
+        - General information about the DataFrame.
+        - Descriptive statistics.
+        - Count of missing values.
+        - Identification of outliers using the Z-score method.
+        """
 
         print("First few rows of the data:")
         print(self.merged_data.head(12))
@@ -86,6 +115,10 @@ class EDA_comparison:
     # ------------------------------
 
     def data_statistics(self):
+        """
+        Calculates and displays basic statistics of the numerical columns in the merged dataset, 
+        including mean, median, mode, variance, and standard deviation.
+        """
 
         numeric_data = self.merged_data.select_dtypes(include=[np.number])
 
@@ -107,6 +140,12 @@ class EDA_comparison:
     # ------------------------------
 
     def plot_performances_indv(self, sp500_column='^GSPC_AC'):
+        """
+        Plots the individual performance of economic indicators along with the S&P 500.
+
+        Args:
+            sp500_column (str): Name of the S&P 500 column in the merged data. Defaults to '^GSPC_AC'.
+        """
 
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         axs = axs.flatten()
@@ -133,6 +172,12 @@ class EDA_comparison:
     # ------------------------------
 
     def plot_performances_grpl(self, sp500_column='^GSPC_AC'):
+        """
+        Plots the grouped performance of economic indicators and the S&P 500.
+
+        Args:
+            sp500_column (str): Name of the S&P 500 column in the merged data. Defaults to '^GSPC_AC'.
+        """
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
@@ -161,6 +206,12 @@ class EDA_comparison:
     # ------------------------------
 
     def plot_histograms(self, sp500_column='^GSPC_AC'):
+        """
+        Plots histograms for economic indicators and the S&P 500.
+
+        Args:
+            sp500_column (str): Name of the S&P 500 column in the merged data. Defaults to '^GSPC_AC'.
+        """
 
         ax1 = plt.subplot2grid((2, 2), (0, 0), colspan=2)
 
@@ -192,6 +243,12 @@ class EDA_comparison:
     # ------------------------------
 
     def plot_boxplots(self, sp500_column='^GSPC_AC'):
+        """
+        Plots boxplots for economic indicators and the S&P 500.
+
+        Args:
+            sp500_column (str): Name of the S&P 500 column in the merged data. Defaults to '^GSPC_AC'.
+        """
 
         data = [self.merged_data[indicator].dropna() for indicator in self.economic_indicators_data.columns.tolist()]
         colors = [self.indicators_colors.get(indicator, 'gray') for indicator in self.economic_indicators_data.columns.tolist()]
@@ -216,6 +273,9 @@ class EDA_comparison:
     # ------------------------------
 
     def plot_relations(self):
+        """
+        Plots the relationships between economic indicators using scatter plots and histograms.
+        """
 
         sns.set(style="white")
         num_vars = len(self.economic_indicators_data.columns.tolist())
@@ -252,6 +312,9 @@ class EDA_comparison:
     # ------------------------------
 
     def plot_correlation_matrix(self):
+        """
+        Plots the correlation matrix between economic indicators.
+        """
 
         plt.figure(figsize=(12, 8))
         sns.heatmap(self.economic_indicators_data.corr(), annot=True, cmap='coolwarm', vmin=-1, vmax=1)
@@ -261,6 +324,9 @@ class EDA_comparison:
     # ------------------------------
 
     def perform_EDA_comparison(self):
+        """
+        Performs a complete exploratory data analysis by executing all analysis and visualization methods.
+        """
 
         self.data_summary()
         self.data_statistics()
@@ -273,9 +339,27 @@ class EDA_comparison:
 
 # --------------------------------------------------
 
+# CLASS FOR DOWNLOADING HISTORICAL ADJUSTED CLOSE PRICES AND BETA VALUES FOR A LIST OF TICKERS
 class HistoricalDataDownloader:
+    """
+    Class for downloading historical adjusted close prices and beta values for a list of tickers.
+
+    Attributes:
+        tickers (list): List of ticker symbols to download data for.
+        start_date (str): Start date for downloading data.
+        end_date (str): End date for downloading data.
+        adj_close (DataFrame): DataFrame containing the adjusted close prices.
+        beta (DataFrame): DataFrame containing the beta values.
+    """
 
     def __init__(self, tickers):
+        """
+        Initializes the HistoricalDataDownloader class.
+
+        Args:
+            tickers (list): List of ticker symbols to download data for.
+        """
+
         self.tickers = tickers
         self.start_date = '2000-01-01'
         self.end_date = '2024-06-01'
@@ -286,6 +370,10 @@ class HistoricalDataDownloader:
     # ------------------------------
 
     def rename_tickers(self):
+        """
+        Renames specific tickers in the list to ensure compatibility with Yahoo Finance.
+        """
+
         ticker_rename_map = {
             'BRK.B': 'BRK-B',
             'BF.B': 'BF-B'
@@ -295,6 +383,10 @@ class HistoricalDataDownloader:
     # ------------------------------
 
     def download_adj_close(self):
+        """
+        Downloads adjusted close prices for each ticker in the list.
+        Merges the data into a single DataFrame.
+        """
 
         for ticker in self.tickers:
             try:
@@ -319,6 +411,10 @@ class HistoricalDataDownloader:
     # ------------------------------
 
     def download_beta(self):
+        """
+        Downloads the beta values for each ticker.
+        If the beta value is not available, calculates it based on the adjusted close prices.
+        """
 
         def calculate_beta(ticker):
 
@@ -360,6 +456,16 @@ class HistoricalDataDownloader:
         # ----------
 
         def fetch_beta(ticker):
+            """
+            Fetches the beta value for a ticker from Yahoo Finance.
+            If not available, calculates it using historical data.
+
+            Args:
+                ticker (str): The ticker symbol to fetch the beta for.
+
+            Returns:
+                dict: A dictionary containing the ticker and its beta value.
+            """
 
             try:
                 if f'{ticker}_AC' not in self.adj_close.columns:
@@ -402,6 +508,13 @@ class HistoricalDataDownloader:
     # ------------------------------
 
     def classify_beta(self):
+        """
+        Classifies beta values into categories based on predefined bins.
+
+        The bins are:
+            - 0: Beta ≤ 0.7
+            - 1: Beta > 0.7
+        """
 
         bins = [-np.inf, 0.7, np.inf]
         labels = ['0', '1']
@@ -411,6 +524,12 @@ class HistoricalDataDownloader:
     # ------------------------------
 
     def save_data(self, filepath):
+        """
+        Saves the adjusted close prices and beta values to an Excel file.
+
+        Args:
+            filepath (str): The path where the Excel file will be saved.
+        """
 
         try:
             directory = os.path.dirname(filepath)
@@ -428,7 +547,8 @@ class HistoricalDataDownloader:
 
 # --------------------------------------------------
 
-# 
+# CLASS FOR BUILDING, TRAINING, AND OPTIMIZING MACHINE LEARNING MODELS BASED ON ECONOMIC INDICATORS
+# AND S&P 500 DATA, INCLUDING LOGISTIC REGRESSION, XGBOOST, AND MLP (MULTI-AYER PERCEPTRON).
 class Models:
 
     def __init__(self, sp500_data, economic_indicators_data, umbral):
