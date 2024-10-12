@@ -812,6 +812,149 @@ class Models:
 
 # --------------------------------------------------
 
+class PortfolioManager:
+
+    def __init__(self, excel_file_path):
+        self.excel_file_path = excel_file_path
+        self.assets_data = self.load_assets_data()
+
+    def load_assets_data(self):
+        """
+        Loads the asset data from the Excel file.
+        """
+        try:
+            df = pd.read_excel(self.excel_file_path, sheet_name='beta')
+            df.columns = ['Ticker', 'Beta', 'Nature']
+            return df
+        except Exception as e:
+            print(f"Error loading Excel file: {e}")
+            return None
+
+    def classify_assets(self):
+        """
+        Classifies the assets into pro-cyclical and anti-cyclical based on the beta values.
+        """
+        prociclicos = self.assets_data[self.assets_data['Beta'] > 0.7]
+        anticiclicos = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
+        return prociclicos, anticiclicos
+
+    def create_portfolio(self, y_predicted):
+        """
+        Creates a portfolio based on the model's predicted value of y.
+        """
+        prociclicos, anticiclicos = self.classify_assets()
+
+        if y_predicted == 1:  # Overweight: 75% pro-cyclical, 25% anti-cyclical
+            pro_ciclic_weight = 0.75
+            anti_ciclic_weight = 0.25
+        elif y_predicted == 0:  # Neutral: 50% pro-cyclical, 50% anti-cyclical
+            pro_ciclic_weight = 0.50
+            anti_ciclic_weight = 0.50
+        elif y_predicted == -1:  # Underweight: 25% pro-cyclical, 75% anti-cyclical
+            pro_ciclic_weight = 0.25
+            anti_ciclic_weight = 0.75
+        else:
+            raise ValueError("Invalid predicted value for y. Must be -1, 0, or 1.")
+
+        portfolio = {}
+
+        # Assign weights to pro-cyclical companies
+        if not prociclicos.empty:
+            pro_ciclic_assets = prociclicos['Ticker'].tolist()
+            pro_ciclic_allocation = pro_ciclic_weight / len(pro_ciclic_assets)
+            for asset in pro_ciclic_assets:
+                portfolio[asset] = pro_ciclic_allocation
+
+        # Assign weights to anti-cyclical companies
+        if not anticiclicos.empty:
+            anti_ciclic_assets = anticiclicos['Ticker'].tolist()
+            anti_ciclic_allocation = anti_ciclic_weight / len(anti_ciclic_assets)
+            for asset in anti_ciclic_assets:
+                portfolio[asset] = anti_ciclic_allocation
+
+        return portfolio
+
+    def load_historical_prices(self):
+        """
+        Loads the historical adjusted close prices from the Excel file (sheet 'adj_close').
+        The first column (A) contains dates, and columns B onwards contain tickers.
+        """
+        try:
+            adj_close_data = pd.read_excel(self.excel_file_path, sheet_name='adj_close', index_col=0, parse_dates=True)
+            return adj_close_data
+        except Exception as e:
+            print(f"Error loading historical prices: {e}")
+            return None
+
+    def calculate_portfolio_returns(self, portfolio, target_return=0):
+        """
+        Calculates the portfolio's daily returns based on the given weights and the historical adjusted close prices.
+        """
+        historical_prices = self.load_historical_prices()
+
+        # Filter the historical data to only include the tickers in the portfolio
+        portfolio_tickers = list(portfolio.keys())
+        historical_prices = historical_prices[portfolio_tickers]
+
+        # Calculate daily returns for each asset
+        daily_returns = historical_prices.pct_change().dropna()
+
+        # Calculate portfolio returns using the asset weights
+        portfolio_weights = np.array([portfolio[ticker] for ticker in portfolio_tickers])
+        portfolio_returns = daily_returns.dot(portfolio_weights)
+
+        return portfolio_returns
+
+    def calculate_omega_ratio(self, portfolio, target_return=0):
+        """
+        Calculates the Omega ratio for the portfolio based on historical adjusted close prices.
+        - target_return: the threshold return (lambda) used in the Omega ratio calculation. Default is 0.
+        """
+        portfolio_returns = self.calculate_portfolio_returns(portfolio)
+
+        # Calculate the excess returns over the target return
+        excess_returns = portfolio_returns - target_return
+
+        # Separate gains (returns above target) and losses (returns below target)
+        gains = excess_returns[excess_returns > 0].sum()
+        losses = -excess_returns[excess_returns < 0].sum()
+
+        if losses == 0:
+            return np.inf  # If there are no losses, the Omega ratio is infinite
+
+        # Omega ratio is the ratio of gains to losses
+        omega_ratio = gains / losses
+
+        return omega_ratio
+
+    def print_portfolio_with_omega(self, y_predicted, target_return=0):
+        """
+        Prints the portfolio with the weights and the calculated Omega ratio.
+        """
+        portfolio = self.create_portfolio(y_predicted)
+        omega_ratio = self.calculate_omega_ratio(portfolio, target_return)
+
+        print(f"Portfolio based on predicted y = {y_predicted}:")
+        for ticker, weight in portfolio.items():
+            print(f"{ticker}: {weight*100:.2f}%")
+
+        print(f"\nOmega Ratio: {omega_ratio:.4f} (Target return: {target_return})")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# --------------------------------------------------
+
 # 
 class DynamicBacktesting:
 

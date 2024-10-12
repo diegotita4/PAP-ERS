@@ -17,6 +17,7 @@ from utils import Models as M
 from utils import EDA_comparison as EDA
 from utils import HistoricalDataDownloader as HDD
 from utils import DynamicBacktesting as DBT
+from utils import PortfolioManager
 
 # --------------------------------------------------
 
