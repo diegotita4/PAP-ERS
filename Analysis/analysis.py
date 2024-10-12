@@ -124,6 +124,20 @@ M_model.optimize_xgboost_with_optuna(n_trials=50)
 
 # --------------------------------------------------
 
+# Initialize the PortfolioManager with the trained model and required data
+portfolio_manager = PortfolioManager(
+    excel_file_path='Data/assets_data.xlsx',
+    model_instance=M_model,            # Pass the model instance
+    sp500_data=sp500_data,
+    economic_data=economic_indicators_data,
+    umbral=umbral
+)
+
+# Print portfolio and calculate the Omega ratio
+portfolio_manager.print_portfolio_with_omega(target_return=0)
+
+# --------------------------------------------------
+
 # INITIALIZE THE DYNAMIC BACKTESTING CLASS
 #DBT_dynback = DBT()
 #DBT_dynback.first_function()

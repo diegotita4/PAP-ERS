@@ -814,9 +814,17 @@ class Models:
 
 class PortfolioManager:
 
-    def __init__(self, excel_file_path):
+    def __init__(self, excel_file_path, model_instance, sp500_data, economic_data, umbral):
+        """
+        Initializes the PortfolioManager class and the Models instance for prediction.
+        - model_instance: an instance of the Models class to get predictions.
+        """
         self.excel_file_path = excel_file_path
         self.assets_data = self.load_assets_data()
+        self.model_instance = model_instance
+        self.sp500_data = sp500_data
+        self.economic_data = economic_data
+        self.umbral = umbral
 
     def load_assets_data(self):
         """
@@ -838,10 +846,21 @@ class PortfolioManager:
         anticiclicos = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
         return prociclicos, anticiclicos
 
-    def create_portfolio(self, y_predicted):
+    def predict_y(self):
+        """
+        Predicts the value of y using the trained model instance.
+        Returns:
+            y_predicted: The predicted y value (-1, 0, or 1).
+        """
+        y_predicted = self.model_instance.predict(self.sp500_data, self.economic_data, self.umbral)
+        return y_predicted
+
+    def create_portfolio(self):
         """
         Creates a portfolio based on the model's predicted value of y.
         """
+        y_predicted = self.predict_y()  # Get the predicted y value from the model
+
         prociclicos, anticiclicos = self.classify_assets()
 
         if y_predicted == 1:  # Overweight: 75% pro-cyclical, 25% anti-cyclical
@@ -886,30 +905,11 @@ class PortfolioManager:
             print(f"Error loading historical prices: {e}")
             return None
 
-    def calculate_portfolio_returns(self, portfolio, target_return=0):
-        """
-        Calculates the portfolio's daily returns based on the given weights and the historical adjusted close prices.
-        """
-        historical_prices = self.load_historical_prices()
-
-        # Filter the historical data to only include the tickers in the portfolio
-        portfolio_tickers = list(portfolio.keys())
-        historical_prices = historical_prices[portfolio_tickers]
-
-        # Calculate daily returns for each asset
-        daily_returns = historical_prices.pct_change().dropna()
-
-        # Calculate portfolio returns using the asset weights
-        portfolio_weights = np.array([portfolio[ticker] for ticker in portfolio_tickers])
-        portfolio_returns = daily_returns.dot(portfolio_weights)
-
-        return portfolio_returns
-
-    def calculate_omega_ratio(self, portfolio, target_return=0):
+    def calculate_omega_ratio(self, target_return=0):
         """
         Calculates the Omega ratio for the portfolio based on historical adjusted close prices.
-        - target_return: the threshold return (lambda) used in the Omega ratio calculation. Default is 0.
         """
+        portfolio = self.create_portfolio()  # Create the portfolio based on the prediction
         portfolio_returns = self.calculate_portfolio_returns(portfolio)
 
         # Calculate the excess returns over the target return
@@ -927,18 +927,20 @@ class PortfolioManager:
 
         return omega_ratio
 
-    def print_portfolio_with_omega(self, y_predicted, target_return=0):
+    def print_portfolio_with_omega(self, target_return=0):
         """
         Prints the portfolio with the weights and the calculated Omega ratio.
         """
-        portfolio = self.create_portfolio(y_predicted)
-        omega_ratio = self.calculate_omega_ratio(portfolio, target_return)
+        portfolio = self.create_portfolio()
+        omega_ratio = self.calculate_omega_ratio(target_return)
 
-        print(f"Portfolio based on predicted y = {y_predicted}:")
+        print(f"Portfolio:")
         for ticker, weight in portfolio.items():
             print(f"{ticker}: {weight*100:.2f}%")
 
         print(f"\nOmega Ratio: {omega_ratio:.4f} (Target return: {target_return})")
+
+
 
 
 
