@@ -540,6 +540,7 @@ class HistoricalDataDownloader:
 
                 if len(self.tickers) > 1:
                     self.beta.to_excel(writer, index=False, sheet_name="beta")
+
             print(f"Data saved to {filepath}")
 
         except Exception as e:
@@ -812,13 +813,11 @@ class Models:
 
 # --------------------------------------------------
 
+# 
 class PortfolioManager:
 
     def __init__(self, excel_file_path, model_instance, sp500_data, economic_data, umbral):
-        """
-        Initializes the PortfolioManager class and the Models instance for prediction.
-        - model_instance: an instance of the Models class to get predictions.
-        """
+
         self.excel_file_path = excel_file_path
         self.assets_data = self.load_assets_data()
         self.model_instance = model_instance
@@ -826,65 +825,72 @@ class PortfolioManager:
         self.economic_data = economic_data
         self.umbral = umbral
 
+    # ------------------------------
+
     def load_assets_data(self):
-        """
-        Loads the asset data from the Excel file.
-        """
+
         try:
             df = pd.read_excel(self.excel_file_path, sheet_name='beta')
             df.columns = ['Ticker', 'Beta', 'Nature']
             return df
+
         except Exception as e:
             print(f"Error loading Excel file: {e}")
             return None
 
+    # ------------------------------
+
     def classify_assets(self):
-        """
-        Classifies the assets into pro-cyclical and anti-cyclical based on the beta values.
-        """
+
         prociclicos = self.assets_data[self.assets_data['Beta'] > 0.7]
         anticiclicos = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
+
         return prociclicos, anticiclicos
 
+    # ------------------------------
+
     def predict_y(self):
-        """
-        Predicts the value of y using the trained model instance.
-        Returns:
-            y_predicted: The predicted y value (-1, 0, or 1).
-        """
+
         y_predicted = self.model_instance.predict(self.sp500_data, self.economic_data, self.umbral)
+
         return y_predicted
 
+    # ------------------------------
+
     def create_portfolio(self):
-        """
-        Creates a portfolio based on the model's predicted value of y.
-        """
-        y_predicted = self.predict_y()  # Get the predicted y value from the model
+
+        y_predicted = self.predict_y()
 
         prociclicos, anticiclicos = self.classify_assets()
 
-        if y_predicted == 1:  # Overweight: 75% pro-cyclical, 25% anti-cyclical
+        if y_predicted == 1:
             pro_ciclic_weight = 0.75
             anti_ciclic_weight = 0.25
-        elif y_predicted == 0:  # Neutral: 50% pro-cyclical, 50% anti-cyclical
+
+        elif y_predicted == 0:
             pro_ciclic_weight = 0.50
             anti_ciclic_weight = 0.50
-        elif y_predicted == -1:  # Underweight: 25% pro-cyclical, 75% anti-cyclical
+
+        elif y_predicted == -1:
             pro_ciclic_weight = 0.25
             anti_ciclic_weight = 0.75
+
         else:
             raise ValueError("Invalid predicted value for y. Must be -1, 0, or 1.")
 
         portfolio = {}
 
-        # Assign weights to pro-cyclical companies
+        # ----------
+
         if not prociclicos.empty:
             pro_ciclic_assets = prociclicos['Ticker'].tolist()
             pro_ciclic_allocation = pro_ciclic_weight / len(pro_ciclic_assets)
+
             for asset in pro_ciclic_assets:
                 portfolio[asset] = pro_ciclic_allocation
 
-        # Assign weights to anti-cyclical companies
+        # ----------
+
         if not anticiclicos.empty:
             anti_ciclic_assets = anticiclicos['Ticker'].tolist()
             anti_ciclic_allocation = anti_ciclic_weight / len(anti_ciclic_assets)
@@ -893,44 +899,41 @@ class PortfolioManager:
 
         return portfolio
 
+    # ------------------------------
+
     def load_historical_prices(self):
-        """
-        Loads the historical adjusted close prices from the Excel file (sheet 'adj_close').
-        The first column (A) contains dates, and columns B onwards contain tickers.
-        """
+
         try:
             adj_close_data = pd.read_excel(self.excel_file_path, sheet_name='adj_close', index_col=0, parse_dates=True)
             return adj_close_data
+
         except Exception as e:
             print(f"Error loading historical prices: {e}")
             return None
 
+    # ------------------------------
+
     def calculate_omega_ratio(self, target_return=0):
-        """
-        Calculates the Omega ratio for the portfolio based on historical adjusted close prices.
-        """
-        portfolio = self.create_portfolio()  # Create the portfolio based on the prediction
+
+        portfolio = self.create_portfolio()
         portfolio_returns = self.calculate_portfolio_returns(portfolio)
 
-        # Calculate the excess returns over the target return
         excess_returns = portfolio_returns - target_return
 
-        # Separate gains (returns above target) and losses (returns below target)
         gains = excess_returns[excess_returns > 0].sum()
         losses = -excess_returns[excess_returns < 0].sum()
 
         if losses == 0:
-            return np.inf  # If there are no losses, the Omega ratio is infinite
+            return np.inf
 
-        # Omega ratio is the ratio of gains to losses
         omega_ratio = gains / losses
 
         return omega_ratio
 
+    # ------------------------------
+
     def print_portfolio_with_omega(self, target_return=0):
-        """
-        Prints the portfolio with the weights and the calculated Omega ratio.
-        """
+
         portfolio = self.create_portfolio()
         omega_ratio = self.calculate_omega_ratio(target_return)
 
@@ -939,12 +942,6 @@ class PortfolioManager:
             print(f"{ticker}: {weight*100:.2f}%")
 
         print(f"\nOmega Ratio: {omega_ratio:.4f} (Target return: {target_return})")
-
-
-
-
-
-
 
 
 

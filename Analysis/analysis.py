@@ -15,9 +15,9 @@
 import pandas as pd
 from utils import Models as M
 from utils import EDA_comparison as EDA
+from utils import PortfolioManager as PM
 from utils import HistoricalDataDownloader as HDD
 from utils import DynamicBacktesting as DBT
-from utils import PortfolioManager
 
 # --------------------------------------------------
 
@@ -124,17 +124,28 @@ M_model.optimize_xgboost_with_optuna(n_trials=50)
 
 # --------------------------------------------------
 
-# Initialize the PortfolioManager with the trained model and required data
-portfolio_manager = PortfolioManager(
+# 
+PM_portfolio = PM(
     excel_file_path='Data/assets_data.xlsx',
-    model_instance=M_model,            # Pass the model instance
+    model_instance=M_model,
     sp500_data=sp500_data,
     economic_data=economic_indicators_data,
     umbral=umbral
 )
 
-# Print portfolio and calculate the Omega ratio
-portfolio_manager.print_portfolio_with_omega(target_return=0)
+# ----------
+
+# 
+PM_portfolio.print_portfolio_with_omega(target_return=0)
+
+
+
+
+
+
+
+
+
 
 # --------------------------------------------------
 
