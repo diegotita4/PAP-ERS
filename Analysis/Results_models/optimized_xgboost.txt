@@ -1,0 +1,24 @@
+OPTIMIZED XGBOOST
+-----------------
+
+Parameters:
+
+{'objective': 'multi:softprob', 'base_score': None, 'booster': None, 'callbacks': None, 'colsample_bylevel': None, 'colsample_bynode': None, 'colsample_bytree': 0.3338047498989052, 'device': None, 'early_stopping_rounds': None, 'enable_categorical': False, 'eval_metric': None, 'feature_types': None, 'gamma': 0.0924534023243443, 'grow_policy': None, 'importance_type': None, 'interaction_constraints': None, 'learning_rate': 0.015519396522544165, 'max_bin': None, 'max_cat_threshold': None, 'max_cat_to_onehot': None, 'max_delta_step': 0, 'max_depth': 1, 'max_leaves': None, 'min_child_weight': 5, 'missing': nan, 'monotone_constraints': None, 'multi_strategy': None, 'n_estimators': 3, 'n_jobs': None, 'num_parallel_tree': None, 'random_state': None, 'reg_alpha': 1.042898381693099, 'reg_lambda': 0.8443856870338815, 'sampling_method': None, 'scale_pos_weight': None, 'subsample': 0.4811756945583655, 'tree_method': None, 'validate_parameters': None, 'verbosity': None}
+
+----------
+
+Accuracy: 0.7159
+
+----------
+
+Classification Report:
+
+              precision    recall  f1-score   support
+
+        -1.0       1.00      1.00      1.00        20
+         0.0       0.63      0.75      0.68        36
+         1.0       0.64      0.50      0.56        32
+
+    accuracy                           0.72        88
+   macro avg       0.76      0.75      0.75        88
+weighted avg       0.72      0.72      0.71        88

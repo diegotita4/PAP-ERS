@@ -26,8 +26,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, roc_curve
 from sklearn.model_selection import train_test_split, RandomizedSearchCV, cross_val_score
+from sklearn.multiclass import OneVsRestClassifier
 
 # ------------------------------
 
@@ -573,6 +574,10 @@ class Models:
 
     # ------------------------------
 
+    from sklearn.multiclass import OneVsRestClassifier
+    from sklearn.metrics import roc_auc_score, roc_curve
+    import matplotlib.pyplot as plt
+
     def logistic_regression(self):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
@@ -580,19 +585,41 @@ class Models:
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
 
-        self.lr_model = LogisticRegression()
+        # Utilizamos OneVsRestClassifier para manejar correctamente la clasificación multiclase
+        self.lr_model = OneVsRestClassifier(LogisticRegression(max_iter=1000))
 
         self.lr_model.fit(X_train, y_train)
 
         y_pred = self.lr_model.predict(X_test)
+        y_pred_proba = self.lr_model.predict_proba(X_test)  # Obtiene las probabilidades para cada clase
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
 
+        # Calcular la curva ROC y el AUC para clasificación multiclase
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')  # Aquí calculamos AUC directamente
+
+        # Graficar la curva AUC-ROC
+        fpr = dict()
+        tpr = dict()
+
+        # Graficamos la curva ROC para cada clase
+        for i in range(len(self.lr_model.classes_)):
+            fpr[i], tpr[i], _ = roc_curve(y_test, y_pred_proba[:, i], pos_label=i)
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+
+        plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) - Logistic Regression')
+        plt.legend(loc="lower right")
+        plt.show()
+
         self.save_best_model(self.lr_model, "logistic_regression", accuracy)
 
         # ----------
-
         print('\n-------------------')
         print('LOGISTIC REGRESSION')
         print('-------------------')
@@ -605,6 +632,8 @@ class Models:
         print(report)
 
         return self.lr_model
+
+
 
     # ------------------------------
 
@@ -715,27 +744,27 @@ class Models:
     def optimized_XGBoost(self):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
-        y = self.model_data['Y'] + 1
+        y = self.model_data['Y'] + 1  # Ajuste del objetivo para evitar valores negativos
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y, random_state=0)
 
         # ----------
 
         def objective(trial):
 
             param = {
-                'objective': 'multi:softprob',
-                'num_class': 3,
-                'n_estimators': trial.suggest_int('n_estimators', 100, 300),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
-                'max_depth': trial.suggest_int('max_depth', 3, 9),
-                'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-                'gamma': trial.suggest_float('gamma', 0, 0.5),
-                'reg_alpha': trial.suggest_float('reg_alpha', 0, 1),
-                'reg_lambda': trial.suggest_float('reg_lambda', 0, 1),
-                'min_child_weight': trial.suggest_int('min_child_weight', 1, 5),
-                'max_delta_step': trial.suggest_int('max_delta_step', 0, 2)
+                'objective': 'multi:softprob',  # Softprob para multiclase
+                'num_class': 3,  # Número de clases
+                'n_estimators': trial.suggest_int('n_estimators', 2, 4),  # Reducción en el número de árboles
+                'learning_rate': trial.suggest_float('learning_rate', 0.010, 0.020),  # Learning rate más bajo
+                'max_depth': trial.suggest_int('max_depth', 1, 2),  # Reducción en la profundidad máxima
+                'subsample': trial.suggest_float('subsample', 0.2, 0.5),  # Subsample más bajo
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.2, 0.4),  # Reducción en el muestreo de columnas
+                'gamma': trial.suggest_float('gamma', 0, 0.3),  # Gamma más bajo
+                'reg_alpha': trial.suggest_float('reg_alpha', 0.5, 2),  # Aumento de la regularización L1
+                'reg_lambda': trial.suggest_float('reg_lambda', 0.5, 2),  # Aumento de la regularización L2
+                'min_child_weight': trial.suggest_int('min_child_weight', 5, 20),  # Aumentar min_child_weight para evitar overfitting
+                'max_delta_step': trial.suggest_int('max_delta_step', 0, 1)
             }
             model = xgb.XGBClassifier(**param)
 
@@ -750,7 +779,7 @@ class Models:
         # ----------
 
         study = optuna.create_study(direction='maximize')
-        study.optimize(objective, n_trials=100)
+        study.optimize(objective, n_trials=50)
 
         best_params = study.best_params
 
@@ -759,9 +788,34 @@ class Models:
         self.xgb_model.fit(X_train, y_train)
 
         y_pred = self.xgb_model.predict(X_test)
+        y_pred_proba = self.xgb_model.predict_proba(X_test)  # Obtiene las probabilidades para cada clase
 
-        accuracy = accuracy_score(y_test - 1, y_pred - 1)
-        report = classification_report(y_test - 1, y_pred - 1)
+        # Ajustamos y_test y y_pred de nuevo para evitar problemas de desplazamiento
+        y_test_adjusted = y_test - 1
+        y_pred_adjusted = y_pred - 1
+
+        accuracy = accuracy_score(y_test_adjusted, y_pred_adjusted)
+        report = classification_report(y_test_adjusted, y_pred_adjusted)
+
+        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
+
+        # Graficar la curva AUC-ROC para cada clase
+        fpr = dict()
+        tpr = dict()
+
+        for i in range(3):  # Como tenemos 3 clases, generamos la curva para cada una
+            fpr[i], tpr[i], _ = roc_curve(y_test_adjusted, y_pred_proba[:, i], pos_label=i)
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+
+        plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) - Optimized XGBoost')
+        plt.legend(loc="lower right")
+        plt.show()
 
         self.save_best_model(self.xgb_model, "optimized_xgboost", accuracy)
 
@@ -779,6 +833,8 @@ class Models:
         print(report)
 
         return self.xgb_model
+
+
 
     # ------------------------------
 
@@ -805,11 +861,33 @@ class Models:
         self.mlp_model.fit(X_train, y_train)
 
         y_pred = self.mlp_model.predict(X_test)
+        y_pred_proba = self.mlp_model.predict_proba(X_test)  # Probabilidades para calcular el AUC-ROC
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred, zero_division=1)
 
+        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
+
+        # Graficar la curva AUC-ROC para cada clase
+        fpr = dict()
+        tpr = dict()
+
+        for i in range(len(self.mlp_model.classes_)):
+            fpr[i], tpr[i], _ = roc_curve(y_test, y_pred_proba[:, i], pos_label=i)
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+
+        plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title(f'Receiver Operating Characteristic (ROC) - MLP ({activation})')
+        plt.legend(loc="lower right")
+        plt.show()
+
         return accuracy, report
+
 
     # ------------------------------
 
@@ -871,8 +949,32 @@ class Models:
 
         self.mlp_model.fit(X_train, y_train)
 
+        y_pred = self.mlp_model.predict(X_test)
+        y_pred_proba = self.mlp_model.predict_proba(X_test)  # Probabilidades para calcular el AUC-ROC
+
+        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
+
+        # Graficar la curva AUC-ROC para cada clase
+        fpr = dict()
+        tpr = dict()
+
+        for i in range(len(self.mlp_model.classes_)):
+            fpr[i], tpr[i], _ = roc_curve(y_test, y_pred_proba[:, i], pos_label=i)
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+
+        plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title(f'Receiver Operating Characteristic (ROC) - Optimized MLP')
+        plt.legend(loc="lower right")
+        plt.show()
+
         joblib.dump(self.mlp_model, 'best_mlp_model.pkl')
         print("Best MLP model saved as 'best_mlp_model.pkl'")
+
 
     # ------------------------------
 

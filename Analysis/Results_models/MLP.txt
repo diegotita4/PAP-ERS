@@ -1,0 +1,36 @@
+MLP Neural Network (ReLU) Accuracy: 0.8813559322033898
+              precision    recall  f1-score   support
+
+        -1.0       0.80      0.92      0.86        13
+         0.0       0.87      0.83      0.85        24
+         1.0       0.95      0.91      0.93        22
+
+    accuracy                           0.88        59
+   macro avg       0.87      0.89      0.88        59
+weighted avg       0.89      0.88      0.88        59
+
+C:\Users\juana\Desktop\PAP-II\PAP-ERS\.venv\Lib\site-packages\sklearn\metrics\_ranking.py:1183: UndefinedMetricWarning: No positive samples in y_true, true positive value should be meaningless
+  warnings.warn(
+MLP Neural Network (tanh) Accuracy: 0.9491525423728814
+              precision    recall  f1-score   support
+
+        -1.0       0.86      0.92      0.89        13
+         0.0       0.96      0.92      0.94        24
+         1.0       1.00      1.00      1.00        22
+
+    accuracy                           0.95        59
+   macro avg       0.94      0.95      0.94        59
+weighted avg       0.95      0.95      0.95        59
+
+C:\Users\juana\Desktop\PAP-II\PAP-ERS\.venv\Lib\site-packages\sklearn\metrics\_ranking.py:1183: UndefinedMetricWarning: No positive samples in y_true, true positive value should be meaningless
+  warnings.warn(
+MLP Neural Network (logistic) Accuracy: 0.4067796610169492
+              precision    recall  f1-score   support
+
+        -1.0       1.00      0.00      0.00        13
+         0.0       0.41      1.00      0.58        24
+         1.0       1.00      0.00      0.00        22
+
+    accuracy                           0.41        59
+   macro avg       0.80      0.33      0.19        59
+weighted avg       0.76      0.41      0.24        59

@@ -83,7 +83,7 @@ model_data = pd.read_excel("Data/model_data.xlsx")
 # ------------------------------
 
 # TRAIN LOGISTIC REGRESSION (LR) MODEL
-#lr_model = M_model.logistic_regression()
+lr_model = M_model.logistic_regression()
 
 # ----------
 
@@ -93,38 +93,38 @@ model_data = pd.read_excel("Data/model_data.xlsx")
 # --------------------
 
 # TRAIN MULTI-LAYER PERCEPTRON (MLP) NEURAL NETWORK WITH RELU ACTIVATION
-#mlp_accuracy_relu, mlp_report_relu = M_model.MLP(activation='relu')
-#print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
-#print(mlp_report_relu)
+mlp_accuracy_relu, mlp_report_relu = M_model.MLP(activation='relu')
+print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
+print(mlp_report_relu)
 
 # ----------
 
 # TRAIN MULTI-LAYER PERCEPTRON (MLP) NEURAL NETWORK WITH TANH ACTIVATION
-#mlp_accuracy_tanh, mlp_report_tanh = M_model.MLP(activation='tanh')
-#print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
-#print(mlp_report_tanh)
+mlp_accuracy_tanh, mlp_report_tanh = M_model.MLP(activation='tanh')
+print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
+print(mlp_report_tanh)
 
 # ----------
 
 # TRAIN MULTI-LAYER PERCEPTRON (MLP) NEURAL NETWORK WITH LOGISTIC ACTIVATION
-#mlp_accuracy_logistic, mlp_report_logistic = M_model.MLP(activation='logistic')
-#print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
-#print(mlp_report_logistic)
+mlp_accuracy_logistic, mlp_report_logistic = M_model.MLP(activation='logistic')
+print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
+print(mlp_report_logistic)
 
 # ----------
 
 # TRAIN OPTIMIZED MULTI-LAYER PERCEPTRON (MLP)
-#M_model.optimize_mlp_with_optuna()
+# M_model.optimize_mlp_with_optuna()
 
 # --------------------
 
 # TRAIN XGBOOST MODEL
-#xgb_model = M_model.XGBoost()
+xgb_model = M_model.XGBoost()
 
 # ----------
 
 # TRAIN OPTIMIZED XGBOOST MODEL
-#optimized_xgb_model = M_model.optimized_XGBoost()
+optimized_xgb_model = M_model.optimized_XGBoost()
 
 # --------------------------------------------------
 
@@ -143,7 +143,7 @@ PM_portfolio = PM(
 # ----------
 
 # 
-PM_portfolio.print_portfolio_with_omega(target_return=0)
+PM_portfolio.print_portfolio_with_omega(target_return=0.20)
 
 # --------------------------------------------------
 
