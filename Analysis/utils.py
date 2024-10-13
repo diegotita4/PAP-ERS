@@ -18,16 +18,16 @@ import joblib
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import xgboost as xgb
 import yfinance as yf
 import matplotlib.pyplot as plt
 from scipy import stats
-from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.model_selection import train_test_split, RandomizedSearchCV, cross_val_score
 
 # ------------------------------
 
@@ -577,28 +577,80 @@ class Models:
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
-        
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
-        
-        self.lr_model = LogisticRegression(
-            solver='saga',
-            C=0.3,
-            penalty='l2',
-            class_weight='balanced'
-        )
-        
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
+
+        self.lr_model = LogisticRegression()
+
         self.lr_model.fit(X_train, y_train)
-        
+
         y_pred = self.lr_model.predict(X_test)
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
 
+        # ----------
+
         print('\n-------------------')
         print('LOGISTIC REGRESSION')
         print('-------------------')
-        print(f"\nAccuracy: {accuracy:.4f}")
-        print("\nClassification Report:")
+        print(f'\nParameters:\n')
+        print(self.lr_model.get_params())
+        print('\n----------\n')
+        print(f'Accuracy: {accuracy:.4f}')
+        print('\n----------\n')
+        print('Classification Report:\n')
+        print(report)
+
+        return self.lr_model
+
+    # ------------------------------
+
+    def optimized_logistic_regression(self):
+
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y']
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
+
+        param_dist = [
+            {'penalty': ['l2'], 
+             'C': [0.01, 0.1, 0.3, 1, 3], 
+             'solver': ['lbfgs'], 
+             'max_iter': [1000, 3000], 
+             'class_weight': [None, 'balanced']},
+            {'penalty': ['l1'], 
+             'C': [0.01, 0.1, 0.3, 1, 3], 
+             'solver': ['liblinear'], 
+             'max_iter': [1000, 3000], 
+             'class_weight': [None, 'balanced']}
+        ]
+        random_search = RandomizedSearchCV(LogisticRegression(), param_distributions=param_dist, n_iter=20, cv=5, n_jobs=-1, random_state=0)
+        random_search.fit(X_train, y_train)
+
+        self.lr_model = random_search.best_estimator_
+
+        cv_scores = cross_val_score(self.lr_model, X, y, cv=5)
+
+        y_pred = self.lr_model.predict(X_test)
+
+        accuracy = accuracy_score(y_test, y_pred)
+        report = classification_report(y_test, y_pred)
+
+        # ----------
+
+        print('\n-----------------------------')
+        print('OPTIMIZED LOGISTIC REGRESSION')
+        print('-----------------------------')
+        print(f'\nCross-Validation Scores: {cv_scores}')
+        print(f'\nMean CV Accuracy: {cv_scores.mean():.4f}')
+        print('\n----------\n')
+        print(f'Parameters:\n')
+        print(self.lr_model.get_params())
+        print('\n----------\n')
+        print(f'Accuracy: {accuracy:.4f}')
+        print('\n----------\n')
+        print('Classification Report:\n')
         print(report)
 
         return self.lr_model
@@ -610,90 +662,115 @@ class Models:
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y'] + 1
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
 
-        model = XGBClassifier(use_label_encoder=False, eval_metric='mlogloss')
+        model = xgb.XGBClassifier()
 
-        param_distributions = {
+        param_dist = {
             'n_estimators': [100, 200, 300],
-            'learning_rate': [0.01, 0.1, 0.3],
-            'max_depth': [3, 5, 7],
-            'subsample': [0.6, 0.8, 1.0],
-            'colsample_bytree': [0.6, 0.8, 1.0],
-            'gamma': [0, 0.1, 0.5]
+            'learning_rate': [0.01, 0.1, 0.2, 0.3],
+            'max_depth': [3, 5, 7, 9],
+            'subsample': [0.5, 0.75, 1],
+            'colsample_bytree': [0.5, 0.75, 1],
+            'gamma': [0, 0.1, 0.2, 0.3, 0.4, 0.5],
+            'reg_alpha': [0, 0.1, 0.5, 1.0],
+            'reg_lambda': [0, 0.1, 0.5, 1.0],
+            'min_child_weight': [1, 3, 5],
+            'max_delta_step': [0, 1, 2]
         }
 
-        randomized_search = RandomizedSearchCV(estimator=model, param_distributions=param_distributions, cv=5, scoring='accuracy', verbose=1, n_jobs=-1, n_iter=100)
-        randomized_search.fit(X_train, y_train)
+        random_search = RandomizedSearchCV(model, param_distributions=param_dist, cv=5, scoring='accuracy', verbose=1, n_jobs=-1, n_iter=100, random_state=0)
+        random_search.fit(X_train, y_train)
 
-        self.xgb_model = randomized_search.best_estimator_
+        self.xgb_model = random_search.best_estimator_
 
         y_pred = self.xgb_model.predict(X_test)
 
-        y_pred_original = y_pred - 1
+        accuracy = accuracy_score(y_test - 1, y_pred - 1)
+        report = classification_report(y_test - 1, y_pred - 1)
 
-        accuracy = accuracy_score(y_test, y_pred_original)
-        report = classification_report(y_test - 1, y_pred_original)
+        # ----------
 
-        print(f"Best hyperparameters: {randomized_search.best_params_}")
+        print('\n-------')
+        print('XGBOOST')
+        print('-------')
+        print(f'\nParameters:\n')
+        print(self.xgb_model.get_params())
+        print('\n----------\n')
+        print(f'Accuracy: {accuracy:.4f}')
+        print('\n----------\n')
+        print('Classification Report:\n')
+        print(report)
 
-        return accuracy, report
+        return self.xgb_model
 
     # ------------------------------
 
-    def optimize_XGBoost_with_optuna(self, n_trials=50):
+    def optimized_XGBoost(self):
+
+        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
+        y = self.model_data['Y'] + 1
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
+
+        # ----------
 
         def objective(trial):
 
-            params = {
-                'verbosity': 0,
-                'objective': 'multi:softmax',
+            param = {
+                'objective': 'multi:softprob',
                 'num_class': 3,
-                'eval_metric': 'mlogloss',
-                'eta': trial.suggest_float('eta', 0.01, 0.3),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 300),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
                 'max_depth': trial.suggest_int('max_depth', 3, 9),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'lambda': trial.suggest_float('lambda', 1e-8, 1.0, log=True),
-                'alpha': trial.suggest_float('alpha', 1e-8, 1.0, log=True)
+                'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+                'gamma': trial.suggest_float('gamma', 0, 0.5),
+                'reg_alpha': trial.suggest_float('reg_alpha', 0, 1),
+                'reg_lambda': trial.suggest_float('reg_lambda', 0, 1),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 5),
+                'max_delta_step': trial.suggest_int('max_delta_step', 0, 2)
             }
+            model = xgb.XGBClassifier(**param)
 
-            X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
-            y = self.model_data['Y'] + 1
+            model.fit(X_train, y_train)
 
-            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
+            y_pred = model.predict(X_test)
 
-            model = XGBClassifier(**params, use_label_encoder=False)
-            model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
-
-            preds = model.predict(X_val)
-            accuracy = accuracy_score(y_val, preds)
+            accuracy = accuracy_score(y_test, y_pred)
 
             return accuracy
 
         # ----------
 
-        self.study_xgb = optuna.create_study(direction='maximize')
-        self.study_xgb.optimize(objective, n_trials=n_trials)
+        study = optuna.create_study(direction='maximize')
+        study.optimize(objective, n_trials=100)
 
-        self.train_and_save_best_xgboost()
+        best_params = study.best_params
 
-    # ------------------------------
+        self.xgb_model = xgb.XGBClassifier(**best_params)
 
-    def train_and_save_best_XGBoost(self):
-
-        best_params = self.study_xgb.best_params
-
-        X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
-        y = self.model_data['Y'] + 1
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
-
-        self.xgb_model = XGBClassifier(**best_params, use_label_encoder=False)
         self.xgb_model.fit(X_train, y_train)
 
-        joblib.dump(self.xgb_model, 'best_xgb_model.pkl')
-        print("Best XGBoost model saved as 'best_xgb_model.pkl'")
+        y_pred = self.xgb_model.predict(X_test)
+
+        accuracy = accuracy_score(y_test - 1, y_pred - 1)
+        report = classification_report(y_test - 1, y_pred - 1)
+
+        # ----------
+
+        print('\n-----------------')
+        print('OPTIMIZED XGBOOST')
+        print('-----------------')
+        print(f'\nParameters:\n')
+        print(self.xgb_model.get_params())
+        print('\n----------\n')
+        print(f'Accuracy: {accuracy:.4f}')
+        print('\n----------\n')
+        print('Classification Report:\n')
+        print(report)
+
+        return self.xgb_model
 
     # ------------------------------
 
@@ -705,7 +782,7 @@ class Models:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, stratify=y, random_state=0)
 
         self.mlp_model = MLPClassifier(
             hidden_layer_sizes=(128, 64, 32),
@@ -728,7 +805,7 @@ class Models:
 
     # ------------------------------
 
-    def optimize_MLP_with_optuna(self, n_trials=50):
+    def optimized_MLP(self, n_trials=50):
 
         def objective(trial):
 
@@ -741,7 +818,7 @@ class Models:
 
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
-            X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, random_state=0, stratify=y)
+            X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, stratify=y, random_state=0)
 
             model = MLPClassifier(
                 hidden_layer_sizes=hidden_layer_sizes,
@@ -764,12 +841,6 @@ class Models:
         self.study_mlp = optuna.create_study(direction='maximize')
         self.study_mlp.optimize(objective, n_trials=n_trials)
 
-        self.train_and_save_best_mlp()
-
-    # ------------------------------
-
-    def train_and_save_best_MLP(self):
-
         best_params = self.study_mlp.best_params
         hidden_layer_sizes = tuple([best_params[f'n_units_l{i}'] for i in range(3)])
 
@@ -778,7 +849,7 @@ class Models:
 
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=0, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, stratify=y, random_state=0)
 
         self.mlp_model = MLPClassifier(
             hidden_layer_sizes=hidden_layer_sizes,
