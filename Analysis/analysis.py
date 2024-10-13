@@ -60,6 +60,7 @@ assets = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
 # ------------------------------
 
 # READ ASSETS DATA
+assets_data = pd.read_excel("Data/assets_data.xlsx")
 assets_adj_close_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="adj_close")
 assets_beta_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="beta")
 
@@ -77,17 +78,17 @@ M_model = M(sp500_data, economic_indicators_data, umbral)
 # ------------------------------
 
 # READ MODEL DATA
-model_data = pd.read_excel("Data/assets_data.xlsx", sheet_name="adj_close")
+model_data = pd.read_excel("Data/model_data.xlsx")
 
 # ------------------------------
 
 # TRAIN LOGISTIC REGRESSION (LR) MODEL
-lr_model = M_model.logistic_regression()
+#lr_model = M_model.logistic_regression()
 
 # ----------
 
 # TRAIN OPTIMIZED LOGISTIC REGRESSION (LR) MODEL
-optimized_lr_model = M_model.optimized_logistic_regression()
+#optimized_lr_model = M_model.optimized_logistic_regression()
 
 # --------------------
 
@@ -118,28 +119,33 @@ optimized_lr_model = M_model.optimized_logistic_regression()
 # --------------------
 
 # TRAIN XGBOOST MODEL
-xgb_model = M_model.XGBoost()
+#xgb_model = M_model.XGBoost()
 
 # ----------
 
 # TRAIN OPTIMIZED XGBOOST MODEL
-optimized_xgb_model = M_model.optimized_XGBoost()
+#optimized_xgb_model = M_model.optimized_XGBoost()
 
 # --------------------------------------------------
+
+# SELECTED MODEL
+selected_model = "logistic_regression"
+
+# ----------
 
 # 
 PM_portfolio = PM(
     excel_file_path='Data/assets_data.xlsx',
-    model_instance=M_model,
-    sp500_data=sp500_data,
-    economic_data=economic_indicators_data,
-    umbral=umbral
+    selected_model=selected_model,
+    model_data=model_data
 )
 
 # ----------
 
 # 
-#PM_portfolio.print_portfolio_with_omega(target_return=0)
+PM_portfolio.print_portfolio_with_omega(target_return=0)
+
+# --------------------------------------------------
 
 
 

@@ -589,6 +589,8 @@ class Models:
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
 
+        self.save_best_model(self.lr_model, "logistic_regression", accuracy)
+
         # ----------
 
         print('\n-------------------')
@@ -636,6 +638,8 @@ class Models:
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
+
+        self.save_best_model(self.lr_model, "optimized_logistic_regression", accuracy)
 
         # ----------
 
@@ -688,6 +692,8 @@ class Models:
 
         accuracy = accuracy_score(y_test - 1, y_pred - 1)
         report = classification_report(y_test - 1, y_pred - 1)
+
+        self.save_best_model(self.xgb_model, "xgboost", accuracy)
 
         # ----------
 
@@ -756,6 +762,8 @@ class Models:
 
         accuracy = accuracy_score(y_test - 1, y_pred - 1)
         report = classification_report(y_test - 1, y_pred - 1)
+
+        self.save_best_model(self.xgb_model, "optimized_xgboost", accuracy)
 
         # ----------
 
@@ -882,19 +890,46 @@ class Models:
         except Exception as e:
             print(f"Failed to save data: {e}")
 
+    # ------------------------------
+
+    def save_best_model(self, model, model_name, accuracy):
+
+        models_dir = 'Models'
+        os.makedirs(models_dir, exist_ok=True)
+
+        model_filename = f"Models/{model_name}.pkl"
+        accuracy_filename = f"Models/{model_name}_best_accuracy.txt"
+
+        if os.path.exists(accuracy_filename):
+            with open(accuracy_filename, 'r') as f:
+                saved_accuracy = float(f.read())
+
+        else:
+            saved_accuracy = 0
+
+        if accuracy > saved_accuracy:
+
+            joblib.dump(model, model_filename)
+
+            with open(accuracy_filename, 'w') as f:
+                f.write(str(accuracy))
+
+            print(f"New model '{model_name}' saved with an accuracy of {accuracy * 100:.2f}%")
+
+        else:
+            print(f"The current model has better accuracy ({saved_accuracy * 100:.2f}%). The new model is not saved.")
+
 # --------------------------------------------------
 
 # 
 class PortfolioManager:
 
-    def __init__(self, excel_file_path, model_instance, sp500_data, economic_data, umbral):
+    def __init__(self, excel_file_path, selected_model, model_data):
 
         self.excel_file_path = excel_file_path
         self.assets_data = self.load_assets_data()
-        self.model_instance = model_instance
-        self.sp500_data = sp500_data
-        self.economic_data = economic_data
-        self.umbral = umbral
+        self.selected_model = selected_model
+        self.model_data = model_data
 
     # ------------------------------
 
@@ -913,26 +948,36 @@ class PortfolioManager:
 
     def classify_assets(self):
 
-        prociclicos = self.assets_data[self.assets_data['Beta'] > 0.7]
-        anticiclicos = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
+        self.assets_data['Ticker_AC'] = self.assets_data['Ticker'] + '_AC'
 
-        return prociclicos, anticiclicos
+        pro_ciclics = self.assets_data[self.assets_data['Beta'] > 0.7]
+        anti_ciclics = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
+
+        return pro_ciclics, anti_ciclics
 
     # ------------------------------
-
+    
     def predict_y(self):
 
-        y_predicted = self.model_instance.predict(self.sp500_data, self.economic_data, self.umbral)
+        model_filename = f'Models/{self.selected_model}.pkl'
+        
+        try:
+            model = joblib.load(model_filename)
+            y_predicted = model.predict(self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']])
+            
+            return y_predicted
 
-        return y_predicted
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            return None
 
     # ------------------------------
 
     def create_portfolio(self):
 
-        y_predicted = self.predict_y()
+        y_predicted = self.predict_y()[-1]
 
-        prociclicos, anticiclicos = self.classify_assets()
+        pro_ciclics, anti_ciclics = self.classify_assets()
 
         if y_predicted == 1:
             pro_ciclic_weight = 0.75
@@ -953,20 +998,21 @@ class PortfolioManager:
 
         # ----------
 
-        if not prociclicos.empty:
-            pro_ciclic_assets = prociclicos['Ticker'].tolist()
+        if not pro_ciclics.empty:
+            pro_ciclic_assets = pro_ciclics['Ticker'].tolist()
             pro_ciclic_allocation = pro_ciclic_weight / len(pro_ciclic_assets)
 
             for asset in pro_ciclic_assets:
-                portfolio[asset] = pro_ciclic_allocation
+                portfolio[f"{asset}_AC"] = pro_ciclic_allocation
 
         # ----------
 
-        if not anticiclicos.empty:
-            anti_ciclic_assets = anticiclicos['Ticker'].tolist()
+        if not anti_ciclics.empty:
+            anti_ciclic_assets = anti_ciclics['Ticker'].tolist()
             anti_ciclic_allocation = anti_ciclic_weight / len(anti_ciclic_assets)
+
             for asset in anti_ciclic_assets:
-                portfolio[asset] = anti_ciclic_allocation
+                portfolio[f"{asset}_AC"] = anti_ciclic_allocation
 
         return portfolio
 
@@ -981,6 +1027,23 @@ class PortfolioManager:
         except Exception as e:
             print(f"Error loading historical prices: {e}")
             return None
+
+    # ------------------------------
+
+    def calculate_portfolio_returns(self, portfolio, target_return=0):
+
+        historical_prices = self.load_historical_prices()
+
+        portfolio_tickers = [f"{ticker}_AC" for ticker in portfolio.keys()]
+        valid_tickers = [ticker for ticker in portfolio_tickers if ticker in historical_prices.columns]
+        historical_prices = historical_prices[valid_tickers]
+
+        daily_returns = historical_prices.pct_change().dropna()
+
+        portfolio_weights = np.array([portfolio[ticker.replace('_AC', '')] for ticker in valid_tickers])
+        portfolio_returns = daily_returns.dot(portfolio_weights)
+
+        return portfolio_returns
 
     # ------------------------------
 
@@ -1013,6 +1076,8 @@ class PortfolioManager:
             print(f"{ticker}: {weight*100:.2f}%")
 
         print(f"\nOmega Ratio: {omega_ratio:.4f} (Target return: {target_return})")
+
+# --------------------------------------------------
 
 
 
