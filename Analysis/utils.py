@@ -554,8 +554,29 @@ class HistoricalDataDownloader:
 # CLASS FOR BUILDING, TRAINING, AND OPTIMIZING MACHINE LEARNING MODELS BASED ON ECONOMIC INDICATORS
 # AND S&P 500 DATA, INCLUDING LOGISTIC REGRESSION, XGBOOST, AND MLP (MULTI-AYER PERCEPTRON).
 class Models:
+    """
+    A class used to represent different machine learning models for predicting stock market performance
+    based on economic indicators and the S&P 500.
+    
+    Attributes:
+        sp500_data (DataFrame): The historical data for the S&P 500.
+        economic_indicators_data (DataFrame): The economic indicators data.
+        umbral (float): The threshold used to classify the target variable (Y).
+        model_data (DataFrame): The processed and merged data for training the models.
+    """
 
     def __init__(self, sp500_data, economic_indicators_data, umbral):
+        """
+        Initializes the Models class with the provided S&P 500 data, economic indicators, and threshold.
+
+        Args:
+            sp500_data (DataFrame): The historical S&P 500 data.
+            economic_indicators_data (DataFrame): Data containing economic indicators.
+            umbral (float): The threshold for classifying the target variable Y.
+
+        Returns:
+            None
+        """
 
         self.economic_indicators_data = economic_indicators_data
         self.sp500_data = sp500_data
@@ -565,6 +586,18 @@ class Models:
     # ------------------------------
 
     def model_data_function(self, economic_indicators_data, sp500_data, umbral):
+        """
+        Merges economic indicators with S&P 500 data, calculates percentage changes for S&P 500,
+        and applies a threshold to create the target variable Y.
+
+        Args:
+            economic_indicators_data (DataFrame): Data containing economic indicators.
+            sp500_data (DataFrame): The historical data for the S&P 500.
+            umbral (float): The threshold used to classify Y.
+
+        Returns:
+            DataFrame: The merged and processed model data with the target variable Y.
+        """
 
         model_data = pd.merge(economic_indicators_data, sp500_data, on='Date', how='inner')
         model_data['^GSPC_R'] = model_data['^GSPC_AC'].pct_change().dropna()
@@ -577,36 +610,38 @@ class Models:
     # ------------------------------
 
     def logistic_regression(self):
+        """
+        Trains a logistic regression model using the processed model data and evaluates its performance.
+        The model handles multi-class classification using OneVsRestClassifier.
+
+        Returns:
+            LogisticRegression: The trained logistic regression model.
+        """
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
 
-        # Binarize the labels for multi-class handling
         y = label_binarize(y, classes=np.unique(y))
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
 
-        # Utilizamos OneVsRestClassifier para manejar correctamente la clasificación multiclase
         self.lr_model = OneVsRestClassifier(LogisticRegression(max_iter=1000))
 
         self.lr_model.fit(X_train, y_train)
 
         y_pred = self.lr_model.predict(X_test)
-        y_pred_proba = self.lr_model.predict_proba(X_test)  # Obtiene las probabilidades para cada clase
+        y_pred_proba = self.lr_model.predict_proba(X_test)  
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
 
-        # Calcular la curva ROC y el AUC para clasificación multiclase
-        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')  # Calculamos AUC directamente
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr') 
 
-        # Graficar la curva AUC-ROC
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
         n_classes = y_test.shape[1]
 
-        # Graficamos la curva ROC para cada clase
         for i in range(n_classes):
             fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_pred_proba[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
@@ -641,6 +676,13 @@ class Models:
     # ------------------------------
 
     def optimized_logistic_regression(self):
+        """
+        Optimizes the Logistic Regression model by searching for the best hyperparameters using RandomizedSearchCV.
+        Evaluates the model using cross-validation and saves the best-performing model.
+
+        Returns:
+            LogisticRegression: The optimized logistic regression model.
+        """
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
@@ -694,6 +736,13 @@ class Models:
     # ------------------------------
 
     def XGBoost(self):
+        """
+        Trains an XGBoost classifier using the processed model data. Performs RandomizedSearchCV to find the best hyperparameters.
+        Evaluates the model on test data and saves the best-performing model.
+
+        Returns:
+            XGBClassifier: The trained XGBoost model.
+        """
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y'] + 1
@@ -745,28 +794,43 @@ class Models:
     # ------------------------------
 
     def optimized_XGBoost(self):
+        """
+        Optimizes the XGBoost classifier using Optuna for hyperparameter tuning. 
+        Evaluates the model on test data and saves the best-performing model.
+
+        Returns:
+            XGBClassifier: The optimized XGBoost model.
+        """
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
-        y = self.model_data['Y'] + 1  # Ajuste del objetivo para evitar valores negativos
-
+        y = self.model_data['Y'] + 1  
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y, random_state=0)
 
         # ----------
 
         def objective(trial):
+            """
+            Defines the objective function for Optuna to optimize hyperparameters for the XGBoost model.
+            
+            Args:
+                trial (Trial): Optuna trial object.
+
+            Returns:
+                float: The accuracy of the model on validation data.
+            """
 
             param = {
-                'objective': 'multi:softprob',  # Softprob para multiclase
-                'num_class': 3,  # Número de clases
-                'n_estimators': trial.suggest_int('n_estimators', 2, 4),  # Reducción en el número de árboles
-                'learning_rate': trial.suggest_float('learning_rate', 0.010, 0.020),  # Learning rate más bajo
-                'max_depth': trial.suggest_int('max_depth', 1, 2),  # Reducción en la profundidad máxima
-                'subsample': trial.suggest_float('subsample', 0.2, 0.5),  # Subsample más bajo
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.2, 0.4),  # Reducción en el muestreo de columnas
-                'gamma': trial.suggest_float('gamma', 0, 0.3),  # Gamma más bajo
-                'reg_alpha': trial.suggest_float('reg_alpha', 0.5, 2),  # Aumento de la regularización L1
-                'reg_lambda': trial.suggest_float('reg_lambda', 0.5, 2),  # Aumento de la regularización L2
-                'min_child_weight': trial.suggest_int('min_child_weight', 5, 20),  # Aumentar min_child_weight para evitar overfitting
+                'objective': 'multi:softprob',  
+                'num_class': 3,  
+                'n_estimators': trial.suggest_int('n_estimators', 2, 4),  
+                'learning_rate': trial.suggest_float('learning_rate', 0.010, 0.020), 
+                'max_depth': trial.suggest_int('max_depth', 1, 2), 
+                'subsample': trial.suggest_float('subsample', 0.2, 0.5), 
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.2, 0.4),  
+                'gamma': trial.suggest_float('gamma', 0, 0.3),  
+                'reg_alpha': trial.suggest_float('reg_alpha', 0.5, 2),  
+                'reg_lambda': trial.suggest_float('reg_lambda', 0.5, 2),  
+                'min_child_weight': trial.suggest_int('min_child_weight', 5, 20),  
                 'max_delta_step': trial.suggest_int('max_delta_step', 0, 1)
             }
             model = xgb.XGBClassifier(**param)
@@ -791,27 +855,23 @@ class Models:
         self.xgb_model.fit(X_train, y_train)
 
         y_pred = self.xgb_model.predict(X_test)
-        y_pred_proba = self.xgb_model.predict_proba(X_test)  # Obtiene las probabilidades para cada clase
+        y_pred_proba = self.xgb_model.predict_proba(X_test)  
 
-        # Ajustamos y_test y y_pred de nuevo para evitar problemas de desplazamiento
         y_test_adjusted = y_test - 1
         y_pred_adjusted = y_pred - 1
 
         accuracy = accuracy_score(y_test_adjusted, y_pred_adjusted)
         report = classification_report(y_test_adjusted, y_pred_adjusted)
 
-        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
         roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
 
-        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
         y_test_binarized = label_binarize(y_test_adjusted, classes=[-1, 0, 1])  # Asegurarse de usar las clases correctas
 
-        # Graficar la curva AUC-ROC para cada clase
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
 
-        for i in range(3):  # Como tenemos 3 clases, generamos la curva para cada una
+        for i in range(3):  
             fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
             plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
@@ -842,11 +902,19 @@ class Models:
 
         return self.xgb_model
 
-
-
     # ------------------------------
 
     def MLP(self, activation='relu'):
+        """
+        Trains a Multi-Layer Perceptron (MLP) model using the processed model data.
+        Evaluates the model on test data and plots the AUC-ROC curve for each class.
+
+        Args:
+            activation (str): The activation function to use in the hidden layers (default is 'relu').
+
+        Returns:
+            tuple: A tuple containing the accuracy of the model and the classification report.
+        """
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
@@ -869,20 +937,18 @@ class Models:
         self.mlp_model.fit(X_train, y_train)
 
         y_pred = self.mlp_model.predict(X_test)
-        y_pred_proba = self.mlp_model.predict_proba(X_test)  # Probabilidades para calcular el AUC-ROC
+        y_pred_proba = self.mlp_model.predict_proba(X_test)  
 
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred, zero_division=1)
 
-        # Binarizar las clases para el AUC-ROC multiclase
-        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  # Binarización de las clases
+        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  
 
-        # Graficar la curva AUC-ROC para cada clase
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
 
-        for i in range(3):  # Para cada clase (teniendo 3 clases: -1, 0, 1)
+        for i in range(3): 
             fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
             plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
@@ -899,12 +965,30 @@ class Models:
         
         return accuracy, report
 
-
     # ------------------------------
 
     def optimized_MLP(self, n_trials=50):
+        """
+        Optimizes the Multi-Layer Perceptron (MLP) model using Optuna for hyperparameter tuning.
+        Evaluates the model on test data and saves the best-performing model.
+
+        Args:
+            n_trials (int): The number of trials for Optuna to perform for hyperparameter tuning (default is 50).
+
+        Returns:
+            None
+        """
 
         def objective(trial):
+            """
+            Defines the objective function for Optuna to optimize the MLP model's hyperparameters.
+
+            Args:
+                trial (Trial): Optuna trial object.
+
+            Returns:
+                float: The accuracy of the model on validation data.
+            """
 
             hidden_layer_sizes = tuple([trial.suggest_int(f'n_units_l{i}', 16, 128) for i in range(3)])
             alpha = trial.suggest_loguniform('alpha', 1e-5, 1e-1)
@@ -961,17 +1045,15 @@ class Models:
         self.mlp_model.fit(X_train, y_train)
 
         y_pred = self.mlp_model.predict(X_test)
-        y_pred_proba = self.mlp_model.predict_proba(X_test)  # Probabilidades para calcular el AUC-ROC
+        y_pred_proba = self.mlp_model.predict_proba(X_test)  
 
-        # Binarizar las clases para el AUC-ROC multiclase
-        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  # Binarización de las clases
+        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  
 
-        # Graficar la curva AUC-ROC para cada clase
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
 
-        for i in range(3):  # Para cada clase (teniendo 3 clases: -1, 0, 1)
+        for i in range(3):  
             fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
             plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
@@ -992,7 +1074,16 @@ class Models:
     # ------------------------------
 
     def save_data(self, filepath):
+        """
+        Saves the processed model data to an Excel file.
 
+        Args:
+            filepath (str): The file path where the data should be saved.
+
+        Returns:
+            None
+        """
+        
         try:
             directory = os.path.dirname(filepath)
             os.makedirs(directory, exist_ok=True)
@@ -1008,6 +1099,18 @@ class Models:
     # ------------------------------
 
     def save_best_model(self, model, model_name, accuracy):
+        """
+        Saves the model with the highest accuracy to a file. If a model with a higher accuracy already exists, 
+        it skips saving.
+
+        Args:
+            model: The machine learning model to save.
+            model_name (str): The name of the model.
+            accuracy (float): The accuracy of the model.
+
+        Returns:
+            None
+        """
 
         models_dir = 'Models'
         os.makedirs(models_dir, exist_ok=True)
