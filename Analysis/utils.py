@@ -15,6 +15,7 @@
 import os
 import optuna
 import joblib
+from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -907,7 +908,8 @@ class Models:
     def MLP(self, activation='relu'):
         """
         Trains a Multi-Layer Perceptron (MLP) model using the processed model data.
-        Evaluates the model on test data and plots the AUC-ROC curve for each class.
+        Evaluates the model on test data, plots the AUC-ROC curve for each class,
+        and saves the trained model in a .pkl file inside the 'Models' folder with the activation function name in the filename.
 
         Args:
             activation (str): The activation function to use in the hidden layers (default is 'relu').
@@ -942,7 +944,7 @@ class Models:
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred, zero_division=1)
 
-        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  
+        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])
 
         fpr = dict()
         tpr = dict()
@@ -962,9 +964,20 @@ class Models:
         plt.legend(loc="lower right")
         plt.show()
 
-        
-        return accuracy, report
+        # Create the Models directory if it doesn't exist
+        models_dir = 'Models'
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
 
+        # Save the model to the 'Models' folder with the activation name
+        model_filename = os.path.join(models_dir, f"mlp_{activation}.pkl")
+        try:
+            joblib.dump(self.mlp_model, model_filename)
+            print(f"Model saved as '{model_filename}'")
+        except Exception as e:
+            print(f"Error saving the model: {e}")
+
+        return accuracy, report
     # ------------------------------
 
     def optimized_MLP(self, n_trials=50):
@@ -976,7 +989,7 @@ class Models:
             n_trials (int): The number of trials for Optuna to perform for hyperparameter tuning (default is 50).
 
         Returns:
-            None
+            MLPClassifier: The optimized MLP model.
         """
 
         def objective(trial):
@@ -989,7 +1002,6 @@ class Models:
             Returns:
                 float: The accuracy of the model on validation data.
             """
-
             hidden_layer_sizes = tuple([trial.suggest_int(f'n_units_l{i}', 16, 128) for i in range(3)])
             alpha = trial.suggest_loguniform('alpha', 1e-5, 1e-1)
             learning_rate_init = trial.suggest_loguniform('learning_rate_init', 1e-5, 1e-1)
@@ -1019,6 +1031,7 @@ class Models:
 
         # ----------
 
+        print("Running Optuna optimization for MLP...")
         self.study_mlp = optuna.create_study(direction='maximize')
         self.study_mlp.optimize(objective, n_trials=n_trials)
 
@@ -1042,18 +1055,19 @@ class Models:
             random_state=0
         )
 
+        print("Training optimized MLP model...")
         self.mlp_model.fit(X_train, y_train)
 
         y_pred = self.mlp_model.predict(X_test)
-        y_pred_proba = self.mlp_model.predict_proba(X_test)  
+        y_pred_proba = self.mlp_model.predict_proba(X_test)
 
-        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  
+        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])
 
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
 
-        for i in range(3):  
+        for i in range(3):
             fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
             plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
@@ -1067,8 +1081,14 @@ class Models:
         plt.legend(loc="lower right")
         plt.show()
 
-        joblib.dump(self.mlp_model, 'best_mlp_model.pkl')
-        print("Best MLP model saved as 'best_mlp_model.pkl'")
+        # Save the model
+        try:
+            joblib.dump(self.mlp_model, 'best_mlp_model.pkl')
+            print("Best MLP model saved as 'best_mlp_model.pkl'")
+        except Exception as e:
+            print(f"Error saving the model: {e}")
+
+        return self.mlp_model
 
 
     # ------------------------------
@@ -1141,9 +1161,15 @@ class Models:
 
 # 
 class PortfolioManager:
-
     def __init__(self, excel_file_path, selected_model, model_data):
+        """
+        Initializes the PortfolioManager with the provided Excel file path, selected model, and model data.
 
+        Args:
+            excel_file_path (str): Path to the Excel file containing assets and historical prices.
+            selected_model (str): The selected machine learning model for predictions.
+            model_data (pd.DataFrame): Data to be used for model predictions.
+        """
         self.excel_file_path = excel_file_path
         self.assets_data = self.load_assets_data()
         self.selected_model = selected_model
@@ -1152,183 +1178,304 @@ class PortfolioManager:
     # ------------------------------
 
     def load_assets_data(self):
+        """
+        Loads asset data (Ticker, Beta, Nature) from the specified Excel file's 'beta' sheet.
 
+        Returns:
+            pd.DataFrame: DataFrame containing asset information (Ticker, Beta, Nature).
+        """
         try:
             df = pd.read_excel(self.excel_file_path, sheet_name='beta')
             df.columns = ['Ticker', 'Beta', 'Nature']
             return df
-
         except Exception as e:
             print(f"Error loading Excel file: {e}")
             return None
-
+        
     # ------------------------------
 
     def classify_assets(self):
+        """
+        Classifies assets into pro-cyclical and anti-cyclical categories based on their Beta values.
 
+        Returns:
+            tuple: Two DataFrames, one for pro-cyclical and one for anti-cyclical assets.
+        """
         self.assets_data['Ticker_AC'] = self.assets_data['Ticker'] + '_AC'
-
         pro_ciclics = self.assets_data[self.assets_data['Beta'] > 0.7]
         anti_ciclics = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
-
         return pro_ciclics, anti_ciclics
-
-    # ------------------------------
     
-    def predict_y(self):
+    # ------------------------------
 
-        model_filename = f'Models/{self.selected_model}.pkl'
-        
+    def predict_y(self):
+        """
+        Loads the mlp_relu model and predicts values based on the provided model data.
+
+        Returns:
+            np.array: Predicted values (y) from the model.
+        """
+        model_filename = 'Models/mlp_relu.pkl'  # Path to your model file
         try:
             model = joblib.load(model_filename)
-            y_predicted = model.predict(self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']])
-            
+            X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']].values  # Use .values to remove feature names
+            y_predicted = model.predict(X)
             return y_predicted
-
         except Exception as e:
             print(f"Error loading model: {e}")
             return None
-
+        
     # ------------------------------
 
-    def create_portfolio(self):
+    def create_portfolio(self, y_pred):
+        """
+        Creates a portfolio based on the model's prediction. The allocation of assets depends on 
+        the predicted y value (-1, 0, or 1).
 
-        y_predicted = self.predict_y()[-1]
+        Args:
+            y_pred (int): The predicted value of y (-1, 0, 1).
 
+        Returns:
+            dict: Portfolio allocation with Ticker and respective weights.
+        """
         pro_ciclics, anti_ciclics = self.classify_assets()
 
-        if y_predicted == 1:
+        if y_pred == 1:
             pro_ciclic_weight = 0.75
             anti_ciclic_weight = 0.25
-
-        elif y_predicted == 0:
+        elif y_pred == 0:
             pro_ciclic_weight = 0.50
             anti_ciclic_weight = 0.50
-
-        elif y_predicted == -1:
+        elif y_pred == -1:
             pro_ciclic_weight = 0.25
             anti_ciclic_weight = 0.75
-
         else:
             raise ValueError("Invalid predicted value for y. Must be -1, 0, or 1.")
 
         portfolio = {}
-
-        # ----------
-
         if not pro_ciclics.empty:
             pro_ciclic_assets = pro_ciclics['Ticker'].tolist()
             pro_ciclic_allocation = pro_ciclic_weight / len(pro_ciclic_assets)
-
             for asset in pro_ciclic_assets:
-                portfolio[f"{asset}_AC"] = pro_ciclic_allocation
-
-        # ----------
+                portfolio[f"{asset}_AC"] = min(0.20, pro_ciclic_allocation)
 
         if not anti_ciclics.empty:
             anti_ciclic_assets = anti_ciclics['Ticker'].tolist()
             anti_ciclic_allocation = anti_ciclic_weight / len(anti_ciclic_assets)
-
             for asset in anti_ciclic_assets:
-                portfolio[f"{asset}_AC"] = anti_ciclic_allocation
+                portfolio[f"{asset}_AC"] = min(0.20, anti_ciclic_allocation)
 
         return portfolio
-
+    
     # ------------------------------
 
-    def load_historical_prices(self):
+    def calculate_portfolio_returns(self, portfolio, date_range):
+        """
+        Calculates portfolio returns for a given date range based on historical prices.
 
-        try:
-            adj_close_data = pd.read_excel(self.excel_file_path, sheet_name='adj_close', index_col=0, parse_dates=True)
-            return adj_close_data
+        Args:
+            portfolio (dict): Portfolio with asset tickers and weights.
+            date_range (list): List of dates over which to calculate the portfolio returns.
 
-        except Exception as e:
-            print(f"Error loading historical prices: {e}")
-            return None
-
-    # ------------------------------
-
-    def calculate_portfolio_returns(self, portfolio, target_return=0):
-
+        Returns:
+            pd.Series: Series of portfolio returns for the given date range.
+        """
         historical_prices = self.load_historical_prices()
-
+        historical_prices = historical_prices.loc[date_range]  # Filter the price data by date range
         portfolio_tickers = [f"{ticker}_AC" for ticker in portfolio.keys()]
         valid_tickers = [ticker for ticker in portfolio_tickers if ticker in historical_prices.columns]
         historical_prices = historical_prices[valid_tickers]
-
         daily_returns = historical_prices.pct_change().dropna()
-
         portfolio_weights = np.array([portfolio[ticker.replace('_AC', '')] for ticker in valid_tickers])
         portfolio_returns = daily_returns.dot(portfolio_weights)
-
         return portfolio_returns
-
+    
     # ------------------------------
 
-    def calculate_omega_ratio(self, target_return=0):
+    def load_historical_prices(self):
+        """
+        Loads historical adjusted close prices from the specified Excel file.
 
-        portfolio = self.create_portfolio()
-        portfolio_returns = self.calculate_portfolio_returns(portfolio)
+        Returns:
+            pd.DataFrame: DataFrame with historical price data.
+        """
+        try:
+            adj_close_data = pd.read_excel(self.excel_file_path, sheet_name='adj_close', index_col=0, parse_dates=True)
+            return adj_close_data
+        except Exception as e:
+            print(f"Error loading historical prices: {e}")
+            return None
+        
+    # ------------------------------
 
+    def calculate_omega_ratio(self, portfolio_returns, target_return=0):
+        """
+        Calculates the Omega Ratio for the created portfolio.
+
+        Args:
+            portfolio_returns (pd.Series): The returns of the portfolio.
+            target_return (float): Target return for calculating excess returns.
+
+        Returns:
+            float: Omega Ratio of the portfolio, or np.nan if invalid.
+        """
         excess_returns = portfolio_returns - target_return
 
         gains = excess_returns[excess_returns > 0].sum()
         losses = -excess_returns[excess_returns < 0].sum()
 
         if losses == 0:
-            return np.inf
+            if gains > 0:
+                return np.inf  # Infinite Omega Ratio when there are no losses
+            else:
+                return np.nan  # Undefined Omega Ratio if both gains and losses are zero or negative
 
         omega_ratio = gains / losses
-
         return omega_ratio
 
-    # ------------------------------
-
-    def print_portfolio_with_omega(self, target_return=0):
-
-        portfolio = self.create_portfolio()
-        omega_ratio = self.calculate_omega_ratio(target_return)
-
-        print(f"Portfolio:")
-        for ticker, weight in portfolio.items():
-            print(f"{ticker}: {weight*100:.2f}%")
-
-        print(f"\nOmega Ratio: {omega_ratio:.4f} (Target return: {target_return})")
 
 # --------------------------------------------------
 
 
-
-
-
-
-
-
-
-
-# --------------------------------------------------
-
-# 
 class DynamicBacktesting:
 
-    def __init__(self):
+    def __init__(self, portfolio_manager, rebalance_frequency_months=3, commission=0.0025):
+        """
+        Initializes the DynamicBacktesting class with a PortfolioManager instance.
 
-        return
+        Args:
+            portfolio_manager (PortfolioManager): Instance of PortfolioManager to manage asset selection and portfolio creation.
+            rebalance_frequency_months (int): Frequency (in months) for rebalancing the portfolio.
+            commission (float): Commission cost per trade, default is 0.0025 (0.25%).
+        """
+        self.portfolio_manager = portfolio_manager
+        self.rebalance_frequency_months = rebalance_frequency_months
+        self.commission = commission
 
     # ------------------------------
 
-    def first_function(self):
+    def rebalance_portfolio(self, y_pred, portfolio_value, current_prices):
+        """
+        Rebalances the portfolio based on the predicted y value and current prices.
 
-        return
+        Args:
+            y_pred (int): Predicted value of y (-1, 0, 1) indicating market condition.
+            portfolio_value (float): Total value of the portfolio before rebalancing.
+            current_prices (pd.Series): Current price of the assets.
 
- # ------------------------------
+        Returns:
+            pd.Series: Number of shares for each asset.
+            float: Updated portfolio value after rebalancing.
+        """
+        # Create portfolio based on the predicted y value
+        portfolio = self.portfolio_manager.create_portfolio(y_pred)
 
-    def second_function(self):
+        # Adjust prices for commission
+        adjusted_prices = current_prices * (1 + self.commission)
 
-        return
+        # Ensure the indices of portfolio and prices are aligned
+        portfolio = pd.Series(portfolio).reindex(adjusted_prices.index, fill_value=0)
 
- # ------------------------------
+        # Calculate investment per asset and the number of shares
+        investment_per_asset = portfolio_value * portfolio.values
+        num_shares = (investment_per_asset / adjusted_prices).apply(np.floor)
 
-    def third_function(self):
+        # Calculate the actual invested value based on the number of shares
+        invested_value = num_shares * current_prices
+        portfolio_value = invested_value.sum()  # Updated portfolio value
 
-        return
+        return num_shares, portfolio_value
+    
+    # ------------------------------
+
+    def run_single_simulation(self, start_date, end_date, initial_portfolio_value=100000):
+        """
+        Runs a single dynamic backtesting simulation by rebalancing at regular intervals.
+        """
+        # Convert end_date to Timestamp to compare with current_date
+        end_date = pd.to_datetime(end_date)
+        
+        historical_prices = self.portfolio_manager.load_historical_prices()
+        historical_prices = historical_prices.loc[start_date:end_date]
+        portfolio_value = initial_portfolio_value
+        num_shares = pd.Series(0, index=historical_prices.columns)
+
+        # Rebalancing loop
+        for current_date in pd.date_range(start=start_date, end=end_date, freq=f'{self.rebalance_frequency_months}ME'):
+            if current_date > end_date:
+                break
+
+            # Find the closest available date in historical_prices
+            closest_date = historical_prices.index.asof(current_date)
+
+            # Predict y value (market condition) based on model predictions
+            y_predictions = self.portfolio_manager.predict_y()
+            y_predicted = np.random.choice(y_predictions)
+
+            # Get current prices for the portfolio rebalancing date
+            current_prices = historical_prices.loc[closest_date]
+
+            # Rebalance the portfolio
+            num_shares, portfolio_value = self.rebalance_portfolio(y_predicted, portfolio_value, current_prices)
+
+        portfolio_returns = self.portfolio_manager.calculate_portfolio_returns(num_shares, historical_prices.index)
+        omega_ratio = self.portfolio_manager.calculate_omega_ratio(portfolio_returns)
+
+        return portfolio_value, omega_ratio
+
+    # ------------------------------
+
+    def run_simulation(self, start_date, end_date, num_simulations=2000, initial_portfolio_value=100000):
+        """
+        Runs multiple dynamic backtesting simulations and calculates performance metrics.
+
+        Args:
+            start_date (str): Start date of the backtest.
+            end_date (str): End date of the backtest.
+            num_simulations (int): Number of simulations to run, default is 2000.
+            initial_portfolio_value (float): Initial portfolio value, default is 100,000.
+
+        Returns:
+            dict: Performance metrics, including average final portfolio value and Omega ratio.
+        """
+        final_values = []
+        omega_ratios = []
+
+        for sim in range(num_simulations):
+            final_value, omega_ratio = self.run_single_simulation(start_date, end_date, initial_portfolio_value)
+            final_values.append(final_value)
+            omega_ratios.append(omega_ratio)
+
+        avg_final_value = np.mean(final_values)
+        avg_omega_ratio = np.mean(omega_ratios)
+        max_final_value = np.max(final_values)
+        min_final_value = np.min(final_values)
+
+        return {
+            'average_final_value': avg_final_value,
+            'average_omega_ratio': avg_omega_ratio,
+            'max_final_value': max_final_value,
+            'min_final_value': min_final_value
+        }
+    
+    # ------------------------------
+
+    def backtest(self, start_date, end_date, num_simulations=2000, n_jobs=-1):
+        """
+        Performs backtesting using the dynamic backtesting strategy.
+
+        Args:
+            start_date (str): Start date of the backtest.
+            end_date (str): End date of the backtest.
+            num_simulations (int): Number of simulations to run, default is 2000.
+            n_jobs (int): Number of parallel jobs (defaults to -1, which uses all available CPUs).
+
+        Returns:
+            dict: Performance metrics for the backtest.
+        """
+        history, avg_omega_ratio = self.run_simulation(start_date, end_date, num_simulations)
+        performance_metrics = {
+            'history': history,
+            'avg_omega_ratio': avg_omega_ratio
+        }
+        return performance_metrics

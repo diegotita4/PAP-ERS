@@ -1,7 +1,7 @@
 
 """
 # -- --------------------------------------------------------------------------------------------------- -- #
-# -- project: Estrategias de Rotación Sectorial (ERS)                                                    -- #
+# -- Project: Estrategias de Rotación Sectorial (ERS)                                                    -- #
 # -- script: Analysis.py - Python script with the main functionality                                     -- #
 # -- authors: diegotita4 - Antonio-IF - JoAlfonso - Oscar148                                             -- #
 # -- license: GNU GENERAL PUBLIC LICENSE - Version 3, 29 June 2007                                       -- #
@@ -83,7 +83,7 @@ model_data = pd.read_excel("Data/model_data.xlsx")
 # ------------------------------
 
 # TRAIN LOGISTIC REGRESSION (LR) MODEL
-lr_model = M_model.logistic_regression()
+#lr_model = M_model.logistic_regression()
 
 # ----------
 
@@ -93,23 +93,24 @@ lr_model = M_model.logistic_regression()
 # --------------------
 
 # TRAIN MULTI-LAYER PERCEPTRON (MLP) NEURAL NETWORK WITH RELU ACTIVATION
-mlp_accuracy_relu, mlp_report_relu = M_model.MLP(activation='relu')
-print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
-print(mlp_report_relu)
+#print("\n--- Training MLP with ReLU Activation ---")
+#mlp_accuracy_relu, mlp_report_relu = M_model.MLP(activation='relu')
+#print("MLP Neural Network (ReLU) Accuracy:", mlp_accuracy_relu)
+#print(mlp_report_relu)
 
 # ----------
 
 # TRAIN MULTI-LAYER PERCEPTRON (MLP) NEURAL NETWORK WITH TANH ACTIVATION
-mlp_accuracy_tanh, mlp_report_tanh = M_model.MLP(activation='tanh')
-print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
-print(mlp_report_tanh)
+#mlp_accuracy_tanh, mlp_report_tanh = M_model.MLP(activation='tanh')
+#print("MLP Neural Network (tanh) Accuracy:", mlp_accuracy_tanh)
+#print(mlp_report_tanh)
 
 # ----------
 
 # TRAIN MULTI-LAYER PERCEPTRON (MLP) NEURAL NETWORK WITH LOGISTIC ACTIVATION
-mlp_accuracy_logistic, mlp_report_logistic = M_model.MLP(activation='logistic')
-print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
-print(mlp_report_logistic)
+#mlp_accuracy_logistic, mlp_report_logistic = M_model.MLP(activation='logistic')
+#print("MLP Neural Network (logistic) Accuracy:", mlp_accuracy_logistic)
+#print(mlp_report_logistic)
 
 # ----------
 
@@ -124,33 +125,46 @@ print(mlp_report_logistic)
 # ----------
 
 # TRAIN OPTIMIZED XGBOOST MODEL
-optimized_xgb_model = M_model.optimized_XGBoost()
-
-# --------------------------------------------------
-
-# SELECTED MODEL
-selected_model = "logistic_regression"
+# optimized_xgb_model = M_model.optimized_XGBoost()
 
 # ----------
 
-# 
+# --------------------------------------------------
+# PREDICTIONS AND PORTFOLIO MANAGEMENT
+# --------------------------------------------------
+
+selected_model = "mlp_relu"
+
+# Initialize PortfolioManager with the predicted y values and asset data
 PM_portfolio = PM(
-    excel_file_path='Data/assets_data.xlsx',
-    selected_model=selected_model,
-    model_data=model_data
+    excel_file_path='Data/assets_data.xlsx',  
+    selected_model=selected_model,            
+    model_data=pd.read_excel("Data/model_data.xlsx")
 )
 
-# ----------
-
-# 
-PM_portfolio.print_portfolio_with_omega(target_return=0.20)
-
+# --------------------------------------------------
+# DYNAMIC BACKTESTING
 # --------------------------------------------------
 
+# Initialize DynamicBacktesting with the PortfolioManager instance
+DBT_dynback = DBT(PM_portfolio)
 
+# Define start and end dates for the backtest
+start_date = '2000-01-01'
+end_date = '2020-01-01'
 
+# Perform dynamic backtesting and retrieve performance metrics
+print("\n--- Running Dynamic Backtesting ---")
+performance_metrics = DBT_dynback.backtest(
+    start_date=start_date, 
+    end_date=end_date, 
+    num_simulations=2000
+)
 
+# Print the backtest performance metrics
+print("Backtest Performance Metrics:", performance_metrics)
 
+# --------------------------------------------------
 
 
 
