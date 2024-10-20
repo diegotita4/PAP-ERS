@@ -26,9 +26,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, roc_curve
+from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, roc_curve, auc
 from sklearn.model_selection import train_test_split, RandomizedSearchCV, cross_val_score
 from sklearn.multiclass import OneVsRestClassifier
+from sklearn.preprocessing import label_binarize
+
 
 # ------------------------------
 
@@ -574,14 +576,13 @@ class Models:
 
     # ------------------------------
 
-    from sklearn.multiclass import OneVsRestClassifier
-    from sklearn.metrics import roc_auc_score, roc_curve
-    import matplotlib.pyplot as plt
-
     def logistic_regression(self):
 
         X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']]
         y = self.model_data['Y']
+
+        # Binarize the labels for multi-class handling
+        y = label_binarize(y, classes=np.unique(y))
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
 
@@ -597,16 +598,19 @@ class Models:
         report = classification_report(y_test, y_pred)
 
         # Calcular la curva ROC y el AUC para clasificación multiclase
-        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')  # Aquí calculamos AUC directamente
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')  # Calculamos AUC directamente
 
         # Graficar la curva AUC-ROC
         fpr = dict()
         tpr = dict()
+        roc_auc = dict()
+        n_classes = y_test.shape[1]
 
         # Graficamos la curva ROC para cada clase
-        for i in range(len(self.lr_model.classes_)):
-            fpr[i], tpr[i], _ = roc_curve(y_test, y_pred_proba[:, i], pos_label=i)
-            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+        for i in range(n_classes):
+            fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_pred_proba[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
 
         plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
@@ -632,7 +636,6 @@ class Models:
         print(report)
 
         return self.lr_model
-
 
 
     # ------------------------------
@@ -800,13 +803,18 @@ class Models:
         # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
         roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
 
+        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
+        y_test_binarized = label_binarize(y_test_adjusted, classes=[-1, 0, 1])  # Asegurarse de usar las clases correctas
+
         # Graficar la curva AUC-ROC para cada clase
         fpr = dict()
         tpr = dict()
+        roc_auc = dict()
 
         for i in range(3):  # Como tenemos 3 clases, generamos la curva para cada una
-            fpr[i], tpr[i], _ = roc_curve(y_test_adjusted, y_pred_proba[:, i], pos_label=i)
-            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+            fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
 
         plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
@@ -866,26 +874,29 @@ class Models:
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred, zero_division=1)
 
-        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
-        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
+        # Binarizar las clases para el AUC-ROC multiclase
+        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  # Binarización de las clases
 
         # Graficar la curva AUC-ROC para cada clase
         fpr = dict()
         tpr = dict()
+        roc_auc = dict()
 
-        for i in range(len(self.mlp_model.classes_)):
-            fpr[i], tpr[i], _ = roc_curve(y_test, y_pred_proba[:, i], pos_label=i)
-            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+        for i in range(3):  # Para cada clase (teniendo 3 clases: -1, 0, 1)
+            fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
 
         plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-        plt.title(f'Receiver Operating Characteristic (ROC) - MLP ({activation})')
+        plt.title(f'Receiver Operating Characteristic (ROC) - MLP (Activation: {activation})')
         plt.legend(loc="lower right")
         plt.show()
 
+        
         return accuracy, report
 
 
@@ -952,23 +963,25 @@ class Models:
         y_pred = self.mlp_model.predict(X_test)
         y_pred_proba = self.mlp_model.predict_proba(X_test)  # Probabilidades para calcular el AUC-ROC
 
-        # Calcular la curva ROC y el AUC para clasificación multiclase usando 'ovr'
-        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')
+        # Binarizar las clases para el AUC-ROC multiclase
+        y_test_binarized = label_binarize(y_test, classes=[-1, 0, 1])  # Binarización de las clases
 
         # Graficar la curva AUC-ROC para cada clase
         fpr = dict()
         tpr = dict()
+        roc_auc = dict()
 
-        for i in range(len(self.mlp_model.classes_)):
-            fpr[i], tpr[i], _ = roc_curve(y_test, y_pred_proba[:, i], pos_label=i)
-            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc:.2f})')
+        for i in range(3):  # Para cada clase (teniendo 3 clases: -1, 0, 1)
+            fpr[i], tpr[i], _ = roc_curve(y_test_binarized[:, i], y_pred_proba[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+            plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} ROC curve (AUC = {roc_auc[i]:.2f})')
 
         plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-        plt.title(f'Receiver Operating Characteristic (ROC) - Optimized MLP')
+        plt.title(f'Receiver Operating Characteristic (ROC) - Optimized MLP (Activation: relu)')
         plt.legend(loc="lower right")
         plt.show()
 

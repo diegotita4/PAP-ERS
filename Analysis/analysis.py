@@ -83,7 +83,7 @@ model_data = pd.read_excel("Data/model_data.xlsx")
 # ------------------------------
 
 # TRAIN LOGISTIC REGRESSION (LR) MODEL
-lr_model = M_model.logistic_regression()
+#lr_model = M_model.logistic_regression()
 
 # ----------
 
@@ -119,12 +119,12 @@ print(mlp_report_logistic)
 # --------------------
 
 # TRAIN XGBOOST MODEL
-xgb_model = M_model.XGBoost()
+#xgb_model = M_model.XGBoost()
 
 # ----------
 
 # TRAIN OPTIMIZED XGBOOST MODEL
-optimized_xgb_model = M_model.optimized_XGBoost()
+# optimized_xgb_model = M_model.optimized_XGBoost()
 
 # --------------------------------------------------
 
