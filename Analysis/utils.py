@@ -1162,116 +1162,139 @@ class Models:
 
 # --------------------------------------------------
 
-# 
-class PortfolioManager:
-    def __init__(self, excel_file_path, model_data):
-        """
-        Initializes PortfolioManager with the Excel file path and model data.
-        """
-        self.excel_file_path = excel_file_path
-        self.assets_data, self.adj_close_data = self.load_assets_data()
-        self.model_data = model_data
-
-    def load_assets_data(self):
-        """
-        Loads adjusted prices and beta data from the Excel file.
-        """
-        try:
-            beta_data = pd.read_excel(self.excel_file_path, sheet_name='beta')
-            adj_close = pd.read_excel(self.excel_file_path, sheet_name='adj_close', index_col="Date")
-            return beta_data, adj_close
-        except Exception as e:
-            print(f"Error loading Excel file: {e}")
-            return None, None
-
-    def classify_assets(self):
-        """
-        Classifies assets into pro-cyclical and anti-cyclical based on the Nature column.
-        """
-        pro_cyclics = self.assets_data[self.assets_data['Nature'] == 1]['Ticker']
-        anti_cyclics = self.assets_data[self.assets_data['Nature'] == 0]['Ticker']
-        return pro_cyclics, anti_cyclics
-
-    def create_portfolio(self, y_pred, initial_portfolio_value=1_000_000):
-        """
-        Builds the portfolio based on the trend signal (y_pred).
-        """
-        pro_cyclics, anti_cyclics = self.classify_assets()
-        selected_assets = []
-
-        if y_pred == 1:
-            selected_assets = sample(pro_cyclics.tolist(), 15) + sample(anti_cyclics.tolist(), 5)
-        elif y_pred == 0:
-            selected_assets = sample(pro_cyclics.tolist(), 10) + sample(anti_cyclics.tolist(), 10)
-        elif y_pred == -1:
-            selected_assets = sample(pro_cyclics.tolist(), 5) + sample(anti_cyclics.tolist(), 15)
-
-        # Add the _AC suffix to selected assets
-        selected_assets = [asset + '_AC' for asset in selected_assets]
-        available_assets = [asset for asset in selected_assets if asset in self.adj_close_data.columns]
-
-        return available_assets
-
-    def optimize_sharpe_ratio(self, returns):
-        """
-        Optimizes asset weights to maximize the Sharpe Ratio.
-        """
-        def sharpe_ratio(weights):
-            portfolio_return = np.sum(returns.mean() * weights)
-            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(returns.cov(), weights)))
-            return -portfolio_return / portfolio_volatility
-
-        num_assets = len(returns.columns)
-        initial_guess = num_assets * [1.0 / num_assets]
-        bounds = tuple((0, 1) for _ in range(num_assets))
-        constraints = {'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}
-
-        optimized_result = minimize(sharpe_ratio, initial_guess, bounds=bounds, constraints=constraints)
-        return optimized_result.x if optimized_result.success else initial_guess
-
-# --------------------------------------------------
+# # Let's proceed by creating a new class `DynamicBacktesting` that encapsulates the classes and methods identified in the notebook.
 
 class DynamicBacktesting:
-    def __init__(self, initial_capital, portfolio_manager, com=0.001):
-        """
-        Initializes the dynamic backtesting class.
-        """
-        self.initial_capital = initial_capital
-        self.portfolio_manager = portfolio_manager
-        self.com = com
-        self.portfolio_value = []
-        self.cash = initial_capital
-        self.positions = {}
+    """Class to encapsulate data handling, portfolio management, and backtesting functionality."""
+    
+    class DataHandler:
+        """Handles loading asset and model data from Excel files."""
+        def __init__(self, assets_path, model_path):
+            self.assets_path = assets_path
+            self.model_path = model_path
+            self.adj_close = None
+            self.beta_data = None
+            self.model_data = None
 
-    def run_backtest(self):
-        """
-        Runs the backtesting cycle.
-        """
-        dates = self.portfolio_manager.model_data.index
-        initial_prices = self.portfolio_manager.adj_close_data.loc[dates[0]]
-        y_trend = self.portfolio_manager.model_data.loc[dates[0], 'Y']
-        selected_assets = self.portfolio_manager.create_portfolio(y_trend)
-        
-        for i in range(12, len(dates), 12):
-            rebalance_date = dates[i]
-            y_trend = self.portfolio_manager.model_data.loc[rebalance_date, 'Y']
-            current_prices = self.portfolio_manager.adj_close_data.loc[rebalance_date, selected_assets]
+        def load_assets_data(self):
+            """Loads asset price data and beta classification data."""
+            self.adj_close = pd.read_excel(self.assets_path, sheet_name='adj_close', index_col="Date")
+            self.beta_data = pd.read_excel(self.assets_path, sheet_name='beta')
+
+        def load_model_data(self):
+            """Loads economic indicators and expected trend data."""
+            self.model_data = pd.read_excel(self.model_path, index_col="Date")
+
+    class Portfolio:
+        """Manages portfolio initialization, optimization, and rebalancing."""
+        def __init__(self, beta_data, adj_close, initial_portfolio_value=1_000_000, commission=0.01):
+            self.beta_data = beta_data
+            self.adj_close = adj_close
+            self.initial_portfolio_value = initial_portfolio_value
+            self.commission = commission
+            self.num_shares = pd.Series(dtype=float)
+            self.current_cash = initial_portfolio_value
+            self.commission_history = []
+
+        def build_portfolio(self, y_trend, current_prices):
+            """Selects assets and initializes portfolio based on economic trend Y."""
+            anticiclical = self.beta_data[self.beta_data['Nature'] == 0]['Ticker'].tolist()
+            prociclical = self.beta_data[self.beta_data['Nature'] == 1]['Ticker'].tolist()
+
+            if y_trend == -1:
+                selected_anticiclical = sample(anticiclical, 15)
+                selected_prociclical = sample(prociclical, 5)
+            elif y_trend == 0:
+                selected_anticiclical = sample(anticiclical, 10)
+                selected_prociclical = sample(prociclical, 10)
+            elif y_trend == 1:
+                selected_anticiclical = sample(anticiclical, 5)
+                selected_prociclical = sample(prociclical, 15)
+
+            selected_assets = selected_anticiclical + selected_prociclical
+            selected_assets = [asset + "_AC" for asset in selected_assets]
+            available_assets = [asset for asset in selected_assets if asset in self.adj_close.columns]
+            current_prices = current_prices[available_assets]
+
+            investment_value_per_asset = self.initial_portfolio_value / len(available_assets)
+            self.num_shares = (investment_value_per_asset / current_prices).apply(np.floor)
+            self.current_cash = self.initial_portfolio_value - (self.num_shares * current_prices).sum()
             
-            returns = self.portfolio_manager.adj_close_data[selected_assets].iloc[i-12:i].pct_change().dropna()
-            optimal_weights = self.portfolio_manager.optimize_sharpe_ratio(returns)
+            return available_assets
+
+        def optimize_sharpe(self, returns):
+            """Optimizes portfolio weights to maximize the Sharpe Ratio."""
+            def sharpe_ratio(weights):
+                portfolio_return = np.sum(returns.mean() * weights)
+                portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(returns.cov(), weights)))
+                return -portfolio_return / portfolio_volatility
+
+            num_assets = len(returns.columns)
+            constraints = ({'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1})
+            bounds = tuple((0, 1) for _ in range(num_assets))
+            initial_guess = num_assets * [1. / num_assets,]
+            optimized_result = minimize(sharpe_ratio, initial_guess, bounds=bounds, constraints=constraints)
             
-            portfolio_value = self.calculate_portfolio_value(optimal_weights, current_prices)
-            self.portfolio_value.append(portfolio_value)
-            print(f"Date: {rebalance_date}, Portfolio Value: {portfolio_value}")
+            return optimized_result.x  # Optimal weights
 
-    def calculate_portfolio_value(self, weights, current_prices):
-        """
-        Calculates the portfolio value given the weights and current prices.
-        """
-        investment = self.cash * weights
-        portfolio_value = (investment * current_prices).sum() * (1 - self.com)
-        return portfolio_value
+        def rebalance_portfolio(self, y_trend, current_prices, rebalance_index):
+            """Rebalances the portfolio based on new trend Y, considering commission."""
+            pre_commission_value = (self.num_shares * current_prices).sum() + self.current_cash
+            commission_cost = (self.num_shares * current_prices * self.commission).sum()
+            self.commission_history.append(commission_cost)
+            total_value_after_commission = pre_commission_value - commission_cost
 
-# --------------------------------------------------
+            selected_assets = self.build_portfolio(y_trend, current_prices)
+            current_prices = current_prices[selected_assets]
+
+            returns = self.adj_close[selected_assets].iloc[rebalance_index-12:rebalance_index].pct_change().dropna()
+            optimal_weights = self.optimize_sharpe(returns)
+
+            investment_value_per_asset = total_value_after_commission * optimal_weights
+            self.num_shares = (investment_value_per_asset / current_prices).apply(np.floor)
+            self.current_cash = total_value_after_commission - (self.num_shares * current_prices).sum()
+
+            return (self.num_shares * current_prices).sum() + self.current_cash, commission_cost
+
+        def calculate_monthly_value(self, current_prices):
+            """Calculates total portfolio value for the given month."""
+            return (self.num_shares * current_prices).sum() + self.current_cash
+
+    class Backtest:
+        """Manages dynamic backtesting with periodic rebalancing."""
+        def __init__(self, model_data, portfolio):
+            self.model_data = model_data
+            self.portfolio = portfolio
+            self.portfolio_value = portfolio.initial_portfolio_value
+            self.portfolio_value_history = []
+            self.dates_history = []
+
+        def run_backtest(self):
+            dates = self.model_data.index
+            initial_prices = self.portfolio.adj_close.loc[dates[0]]
+            y_trend = self.model_data.loc[dates[0], 'Y']
+            self.portfolio.build_portfolio(y_trend, initial_prices)
+
+            for i, current_date in enumerate(dates):
+                y_trend = self.model_data.loc[current_date, 'Y']
+                current_prices = self.portfolio.adj_close.loc[current_date]
+
+                if i % 12 == 0 and i > 0:
+                    self.portfolio.rebalance_portfolio(y_trend, current_prices, i)
+
+                portfolio_value = self.portfolio.calculate_monthly_value(current_prices)
+                self.portfolio_value_history.append(portfolio_value)
+                self.dates_history.append(current_date)
+
+        def save_results_to_excel(self, filename):
+            """Saves backtest results to an Excel file."""
+            results_df = pd.DataFrame({
+                'Date': self.dates_history,
+                'Portfolio_Value': self.portfolio_value_history
+            })
+            results_df.to_excel(filename, index=False)
+            print(f"Results saved to {filename}")
+
+# The new DynamicBacktesting class now incorporates all functionality from the notebook.
 
 

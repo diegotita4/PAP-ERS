@@ -14,10 +14,10 @@
 # LIBRARIES
 import pandas as pd
 import numpy as np 
+from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
 from utils import Models as M
 from utils import EDA_comparison as EDA
-from utils import PortfolioManager as PM
 from utils import HistoricalDataDownloader as HDD
 from utils import DynamicBacktesting as DBT
 
@@ -140,118 +140,59 @@ model_data.set_index('Date', inplace=True)
 # --------------------------------------------------
 # RUN DYNAMIC BACKTESTING
 
-# --------------------------------------------------
-# LIBRARIES
-import pandas as pd
-import numpy as np
-from utils import PortfolioManager as PM
-from utils import DynamicBacktesting as DBT
-import matplotlib.pyplot as plt
+# Inicializa DynamicBacktesting
+# Función para ejecutar una simulación única
+# def run_single_backtest(i, data_handler):
+#     portfolio = DBT.Portfolio(data_handler.beta_data, data_handler.adj_close)
+#     backtest = DBT.Backtest(data_handler.model_data, portfolio)
+#     backtest.run_backtest()
+#     return backtest.portfolio_value_history[0], backtest.portfolio_value_history[-1]
 
-# --------------------------------------------------
-# CLASS TO LOAD AND HANDLE DATA
+# Inicializar DataHandler una vez
+# data_handler = DBT.DataHandler("Data/assets_data.xlsx", "Data/model_data.xlsx")
+# data_handler.load_assets_data()
+# data_handler.load_model_data()
 
-# --------------------------------------------------
-# CLASS TO LOAD AND HANDLE DATA
+# Ejecutar las simulaciones en paralelo
+# results = Parallel(n_jobs=12)(delayed(run_single_backtest)(i, data_handler) for i in range(2000))
 
-class DataHandler:
-    """Class to handle data loading from Excel files."""
-    def __init__(self, assets_path, model_path):
-        self.assets_path = assets_path
-        self.model_path = model_path
-        self.adj_close = None
-        self.beta_data = None
-        self.model_data = None
-
-    def load_assets_data(self):
-        """Loads asset price data and beta classification data."""
-        # Load adjusted close prices and ensure Date is parsed as datetime
-        self.adj_close = pd.read_excel(self.assets_path, sheet_name='adj_close')
-        self.adj_close['Date'] = pd.to_datetime(self.adj_close['Date'], errors='coerce')
-        self.adj_close.set_index('Date', inplace=True)
-        
-        # Load beta data
-        self.beta_data = pd.read_excel(self.assets_path, sheet_name='beta')
-
-    def load_model_data(self):
-        """Loads economic indicators and expected trend data."""
-        # Load model data and ensure Date is parsed as datetime
-        self.model_data = pd.read_excel(self.model_path)
-        self.model_data['Date'] = pd.to_datetime(self.model_data['Date'], errors='coerce')
-        self.model_data.set_index('Date', inplace=True)
-
-    def align_data(self):
-        """Aligns adj_close and model_data to have common dates only starting from the year 2000."""
-        # Filter dates from 2000 onwards
-        self.adj_close = self.adj_close[self.adj_close.index >= "2000-01-01"]
-        self.model_data = self.model_data[self.model_data.index >= "2000-01-01"]
-
-        # Get common dates between adj_close and model_data
-        common_dates = self.adj_close.index.intersection(self.model_data.index)
-        self.adj_close = self.adj_close.loc[common_dates]
-        self.model_data = self.model_data.loc[common_dates]
-
-        print(f"Data aligned to {len(common_dates)} common dates, starting from 2000.")
+# Guardar resultados
+# results_df = pd.DataFrame(results, columns=['Valor Inicial', 'Valor Final'])
+# results_df.to_excel("backtest_results_summary.xlsx", index=False)
+# print("Resultados del backtesting guardados en 'backtest_results_summary.xlsx'")
 
 
+# Checar metricas de las simulaciones: 
+# Cargar los datos de resultados del backtesting
+results_df = pd.read_excel("backtest_results_summary.xlsx")
 
+# Calcular rendimientos para cada simulación
+results_df['Rendimiento'] = (results_df['Valor Final'] - results_df['Valor Inicial']) / results_df['Valor Inicial']
 
-# --------------------------------------------------
-# --------------------------------------------------
-# --------------------------------------------------
-# LOAD AND PROCESS DATA
+# Parámetros para el cálculo de métricas
+risk_free_rate = 0.02  # Ejemplo de tasa libre de riesgo anual
+benchmark_return = 0.07  # Supuesto retorno del índice de referencia (S&P 500)
 
-# Initialize DataHandler and load data
-data_handler = DataHandler("Data/assets_data.xlsx", "Data/model_data.xlsx")
-data_handler.load_assets_data()
-data_handler.load_model_data()
+# 1. Calcular el Ratio de Sharpe
+mean_return = results_df['Rendimiento'].mean()
+std_dev_return = results_df['Rendimiento'].std()
+sharpe_ratio = (mean_return - risk_free_rate) / std_dev_return
 
-# Align data to ensure dates are consistent and start from 2000
-data_handler.align_data()
+# 2. Calcular el Omega Ratio
+# Umbral de retorno mínimo (puede ser la tasa libre de riesgo)
+threshold_return = risk_free_rate
+excess_returns = results_df['Rendimiento'] - threshold_return
 
-# --------------------------------------------------
-# RUN DYNAMIC BACKTESTING
+# Omega ratio: suma de retornos por encima del umbral / suma de retornos por debajo del umbral
+omega_ratio = excess_returns[excess_returns > 0].sum() / abs(excess_returns[excess_returns < 0].sum())
 
-# Initialize PortfolioManager with aligned data
-portfolio_manager = PM(data_handler.assets_path, data_handler.model_data)
+# 3. Calcular el Alpha de Jensen
+# Usamos el supuesto rendimiento de referencia (benchmark_return)
+# Retorno promedio del portafolio - [Tasa libre de riesgo + Beta * (Rendimiento del benchmark - Tasa libre de riesgo)]
+# Para simplificar, asumimos beta = 1 si el portafolio replica al mercado.
+jensen_alpha = mean_return - (risk_free_rate + 1 * (benchmark_return - risk_free_rate))
 
-# Define initial capital for backtesting
-initial_capital = 1_000_000
-
-# Initialize DynamicBacktesting with initial capital and PortfolioManager
-dynamic_backtesting = DBT(initial_capital, portfolio_manager)
-
-# Run backtesting cycle
-dynamic_backtesting.run_backtest()
-
-# Display portfolio value history
-print("Portfolio Value History:", dynamic_backtesting.portfolio_value)
-
-# Optional: Plot the results of the backtesting
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(10, 6))
-plt.plot(dynamic_backtesting.portfolio_value, label="Portfolio Value")
-plt.xlabel("Rebalance Date")
-plt.ylabel("Portfolio Value (USD)")
-plt.title("Backtesting Results: Portfolio Value Over Time")
-plt.legend()
-plt.show()
-
-
-
-# --------------------------------------------------
-
-
-
-
-
-
-
-# --------------------------------------------------
-
-# INITIALIZE THE DYNAMIC BACKTESTING CLASS
-#DBT_dynback = DBT()
-#DBT_dynback.first_function()
-#DBT_dynback.second_function()
-#DBT_dynback.third_function()
+# Resultados
+print(f"Ratio de Sharpe: {sharpe_ratio}")
+print(f"Omega Ratio: {omega_ratio}")
+print(f"Alpha de Jensen: {jensen_alpha}")
