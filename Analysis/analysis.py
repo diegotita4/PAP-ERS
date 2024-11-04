@@ -164,7 +164,7 @@ model_data.set_index('Date', inplace=True)
 
 # Checar metricas de las simulaciones: 
 # Cargar los datos de resultados del backtesting
-results_df = pd.read_excel("backtest_results_summary.xlsx")
+results_df = pd.read_excel("backtest_results.xlsx")
 
 # Calcular rendimientos para cada simulación
 results_df['Rendimiento'] = (results_df['Valor Final'] - results_df['Valor Inicial']) / results_df['Valor Inicial']
