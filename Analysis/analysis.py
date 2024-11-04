@@ -14,11 +14,12 @@
 # LIBRARIES
 import pandas as pd
 import numpy as np 
+import matplotlib.pyplot as plt
 from utils import Models as M
 from utils import EDA_comparison as EDA
 from utils import PortfolioManager as PM
 from utils import HistoricalDataDownloader as HDD
-from utils import DynamicBacktestingWithOmega as DBT
+from utils import DynamicBacktesting as DBT
 
 # --------------------------------------------------
 
@@ -137,142 +138,107 @@ model_data.set_index('Date', inplace=True)
 # ----------
 
 # --------------------------------------------------
-# PREDICTIONS AND PORTFOLIO MANAGEMENT
-# --------------------------------------------------
-
-# Select the model (MLP with ReLU activation)
-selected_model = "mlp_relu"
-
-# Initialize the PortfolioManager with the necessary data
-portfolio_manager = PM(excel_file_path='Data/assets_data.xlsx', selected_model='mlp_relu', model_data=model_data)
-
-# Initialize the dynamic backtesting class with the PortfolioManager and initial capital
-backtest = DBT(1000000, portfolio_manager)
-
-# Run dynamic backtesting using the asset price data and model predictions
-portfolio_values = backtest.run_backtest(assets_adj_close_data, model_data)
-
-# Display backtesting results
-print("Portfolio Values: ", portfolio_values)
+# RUN DYNAMIC BACKTESTING
 
 # --------------------------------------------------
-# Calculate the returns of the portfolio and the S&P 500
-# --------------------------------------------------
-
-# Create a series of the portfolio values to calculate returns
-portfolio_values_series = pd.Series(portfolio_values, index=model_data.index)
-
-# Calculate daily returns for the portfolio
-portfolio_returns = portfolio_values_series.pct_change().dropna()
-
-# Calculate daily returns for the S&P 500
-if '^GSPC_AC' in sp500_data.columns:
-    sp500_returns = sp500_data['^GSPC_AC'].pct_change().dropna()
-else:
-    print("The column '^GSPC_AC' is not present in the S&P 500 data.")
-    sp500_returns = None
+# LIBRARIES
+import pandas as pd
+import numpy as np
+from utils import PortfolioManager as PM
+from utils import DynamicBacktesting as DBT
+import matplotlib.pyplot as plt
 
 # --------------------------------------------------
-# Calculate the Omega Ratio for the portfolio and compare with the S&P 500
-# --------------------------------------------------
-
-# Calculate the Omega Ratio of the portfolio using the PortfolioManager function
-omega_ratio_portfolio = portfolio_manager.calculate_omega_ratio(portfolio_returns, target_return=0.02)
-print(f"Portfolio Omega Ratio: {omega_ratio_portfolio}")
-
-# Calculate the Omega Ratio for the S&P 500, if data is available
-if sp500_returns is not None:
-    omega_ratio_sp500 = portfolio_manager.calculate_omega_ratio(sp500_returns, target_return=0.02)
-    print(f"S&P 500 Omega Ratio: {omega_ratio_sp500}")
+# CLASS TO LOAD AND HANDLE DATA
 
 # --------------------------------------------------
-# Plot portfolio performance versus the S&P 500
-# --------------------------------------------------
+# CLASS TO LOAD AND HANDLE DATA
 
-if '^GSPC_AC' in sp500_data.columns:
-    backtest.plot_performance(sp500_data['^GSPC_AC'], sp500_data.index)
-else:
-    print("The column '^GSPC_AC' is not present in the S&P 500 data.")
+class DataHandler:
+    """Class to handle data loading from Excel files."""
+    def __init__(self, assets_path, model_path):
+        self.assets_path = assets_path
+        self.model_path = model_path
+        self.adj_close = None
+        self.beta_data = None
+        self.model_data = None
 
-# --------------------------------------------------
-# Define the function to get valid tickers
-# --------------------------------------------------
-
-def get_valid_tickers(historical_prices, min_required_dates):
-    """
-    Filters tickers that have valid historical data for at least the minimum required number of dates.
-    
-    Args:
-        historical_prices (pd.DataFrame): DataFrame containing historical price data for all assets.
-        min_required_dates (int): Minimum number of dates for which valid price data should be available.
-    
-    Returns:
-        list: List of valid tickers with sufficient data.
-    """
-    valid_tickers = []
-    
-    for ticker in historical_prices.columns:
-        # Check if the ticker has enough non-NaN data
-        if historical_prices[ticker].count() >= min_required_dates:
-            valid_tickers.append(ticker)
-    
-    return valid_tickers
-
-# --------------------------------------------------
-# Get the list of valid tickers based on historical data
-# --------------------------------------------------
-
-min_required_dates = len(assets_adj_close_data)  # Set to the number of dates in your historical data
-valid_tickers = get_valid_tickers(assets_adj_close_data, min_required_dates)
-
-print(f"Valid Tickers for Backtesting: {valid_tickers}")  # Debugging: Print the valid tickers
-
-# --------------------------------------------------
-# Run Simulations
-# --------------------------------------------------
-
-# Set number of simulations
-num_simulations = 5
-history = []  # Store the results of simulations
-
-# Run simulations
-for sim in range(num_simulations):
-    try:
-        # Randomly choose 10 assets from the valid tickers list
-        selected_tickers = np.random.choice(valid_tickers, 10, replace=False)
+    def load_assets_data(self):
+        """Loads asset price data and beta classification data."""
+        # Load adjusted close prices and ensure Date is parsed as datetime
+        self.adj_close = pd.read_excel(self.assets_path, sheet_name='adj_close')
+        self.adj_close['Date'] = pd.to_datetime(self.adj_close['Date'], errors='coerce')
+        self.adj_close.set_index('Date', inplace=True)
         
-        try:
-            portfolio_values = backtest.run_backtest(assets_adj_close_data, model_data)
-        except ValueError as e:
-            print(f"Error: {e}")
-        
-        # Append the simulation result to history
-        history.append(portfolio_values)
-    except Exception as e:
-        print(f"Simulation {sim+1} failed due to: {e}")
-        continue
+        # Load beta data
+        self.beta_data = pd.read_excel(self.assets_path, sheet_name='beta')
+
+    def load_model_data(self):
+        """Loads economic indicators and expected trend data."""
+        # Load model data and ensure Date is parsed as datetime
+        self.model_data = pd.read_excel(self.model_path)
+        self.model_data['Date'] = pd.to_datetime(self.model_data['Date'], errors='coerce')
+        self.model_data.set_index('Date', inplace=True)
+
+    def align_data(self):
+        """Aligns adj_close and model_data to have common dates only starting from the year 2000."""
+        # Filter dates from 2000 onwards
+        self.adj_close = self.adj_close[self.adj_close.index >= "2000-01-01"]
+        self.model_data = self.model_data[self.model_data.index >= "2000-01-01"]
+
+        # Get common dates between adj_close and model_data
+        common_dates = self.adj_close.index.intersection(self.model_data.index)
+        self.adj_close = self.adj_close.loc[common_dates]
+        self.model_data = self.model_data.loc[common_dates]
+
+        print(f"Data aligned to {len(common_dates)} common dates, starting from 2000.")
+
+
+
 
 # --------------------------------------------------
-# Calculate and Display Performance Metrics
 # --------------------------------------------------
+# --------------------------------------------------
+# LOAD AND PROCESS DATA
 
-# Calculate the performance metrics (e.g., average final return and Omega ratio) for all simulations
-performance_metrics = backtest.calculate_performance_metrics(history)
+# Initialize DataHandler and load data
+data_handler = DataHandler("Data/assets_data.xlsx", "Data/model_data.xlsx")
+data_handler.load_assets_data()
+data_handler.load_model_data()
 
-# Display the performance metrics
-print("Performance Metrics from Simulations:")
-print(f"Average Final Return (%): {performance_metrics['Average Final Return (%)']:.2f}")
-print(f"Average Omega Ratio: {performance_metrics['Average Omega Ratio']:.2f}")
+# Align data to ensure dates are consistent and start from 2000
+data_handler.align_data()
 
 # --------------------------------------------------
-# Plot the Average Performance across Simulations
-# --------------------------------------------------
+# RUN DYNAMIC BACKTESTING
 
-# Plot the average portfolio performance across simulations and compare it with the S&P 500
-if '^GSPC_AC' in sp500_data.columns:
-    backtest.plot_simulation_performance(history, sp500_data['^GSPC_AC'])
-else:
-    print("The column '^GSPC_AC' is not present in the S&P 500 data.")
+# Initialize PortfolioManager with aligned data
+portfolio_manager = PM(data_handler.assets_path, data_handler.model_data)
+
+# Define initial capital for backtesting
+initial_capital = 1_000_000
+
+# Initialize DynamicBacktesting with initial capital and PortfolioManager
+dynamic_backtesting = DBT(initial_capital, portfolio_manager)
+
+# Run backtesting cycle
+dynamic_backtesting.run_backtest()
+
+# Display portfolio value history
+print("Portfolio Value History:", dynamic_backtesting.portfolio_value)
+
+# Optional: Plot the results of the backtesting
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(10, 6))
+plt.plot(dynamic_backtesting.portfolio_value, label="Portfolio Value")
+plt.xlabel("Rebalance Date")
+plt.ylabel("Portfolio Value (USD)")
+plt.title("Backtesting Results: Portfolio Value Over Time")
+plt.legend()
+plt.show()
+
+
 
 # --------------------------------------------------
 

@@ -17,6 +17,7 @@ import random
 import optuna
 import joblib
 from joblib import Parallel, delayed
+from random import sample
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -1163,638 +1164,114 @@ class Models:
 
 # 
 class PortfolioManager:
-    def __init__(self, excel_file_path, selected_model, model_data):
+    def __init__(self, excel_file_path, model_data):
         """
-        Initializes the PortfolioManager with the provided Excel file path, selected model, and model data.
-
-        Args:
-            excel_file_path (str): Path to the Excel file containing assets and historical prices.
-            selected_model (str): The selected machine learning model for predictions.
-            model_data (pd.DataFrame): Data to be used for model predictions.
+        Initializes PortfolioManager with the Excel file path and model data.
         """
         self.excel_file_path = excel_file_path
-        self.assets_data = self.load_assets_data()
-        self.selected_model = selected_model
+        self.assets_data, self.adj_close_data = self.load_assets_data()
         self.model_data = model_data
-
-    # ------------------------------
 
     def load_assets_data(self):
         """
-        Loads asset data (Ticker, Beta, Nature) from the specified Excel file's 'beta' sheet.
-
-        Returns:
-            pd.DataFrame: DataFrame containing asset information (Ticker, Beta, Nature).
+        Loads adjusted prices and beta data from the Excel file.
         """
         try:
-            df = pd.read_excel(self.excel_file_path, sheet_name='beta')
-            print("Structure of assets_data:", df.head())  # Debugging: Print first rows for inspection
-            df.columns = ['Ticker', 'Beta', 'Nature']  # Ensure these columns exist in the Excel file
-            return df
+            beta_data = pd.read_excel(self.excel_file_path, sheet_name='beta')
+            adj_close = pd.read_excel(self.excel_file_path, sheet_name='adj_close', index_col="Date")
+            return beta_data, adj_close
         except Exception as e:
             print(f"Error loading Excel file: {e}")
-            return None
-
-    # ------------------------------
+            return None, None
 
     def classify_assets(self):
         """
-        Classifies assets into pro-cyclical and anti-cyclical categories based on their Beta values.
-
-        Returns:
-            tuple: Two DataFrames, one for pro-cyclical and one for anti-cyclical assets.
+        Classifies assets into pro-cyclical and anti-cyclical based on the Nature column.
         """
-        self.assets_data['Ticker_AC'] = self.assets_data['Ticker'] + '_AC'
-        pro_cyclics = self.assets_data[self.assets_data['Beta'] > 0.7]
-        anti_cyclics = self.assets_data[(self.assets_data['Beta'] >= 0) & (self.assets_data['Beta'] <= 0.7)]
+        pro_cyclics = self.assets_data[self.assets_data['Nature'] == 1]['Ticker']
+        anti_cyclics = self.assets_data[self.assets_data['Nature'] == 0]['Ticker']
         return pro_cyclics, anti_cyclics
 
-    # ------------------------------
-
-    def predict_y(self):
+    def create_portfolio(self, y_pred, initial_portfolio_value=1_000_000):
         """
-        Loads the mlp_relu model and predicts values based on the provided model data.
-
-        Returns:
-            np.array: Predicted values (y) from the model.
-        """
-        model_filename = 'Models/mlp_relu.pkl'  # Path to your model file
-        try:
-            model = joblib.load(model_filename)
-            X = self.model_data[['CLI', 'BCI', 'GDP', 'CCI', '^GSPC_R']].values  # Use .values to remove feature names
-            y_predicted = model.predict(X)
-            return y_predicted
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            return None
-
-    # ------------------------------
-
-    def create_portfolio(self, y_pred):
-        """
-        Creates a portfolio based on the model's prediction. The allocation of assets depends on 
-        the predicted y value (-1, 0, or 1).
-
-        Args:
-            y_pred (int): The predicted value of y (-1, 0, 1).
-
-        Returns:
-            dict: Portfolio allocation with Ticker and respective weights.
+        Builds the portfolio based on the trend signal (y_pred).
         """
         pro_cyclics, anti_cyclics = self.classify_assets()
+        selected_assets = []
 
         if y_pred == 1:
-            pro_cyclic_weight = 0.75
-            anti_cyclic_weight = 0.25
+            selected_assets = sample(pro_cyclics.tolist(), 15) + sample(anti_cyclics.tolist(), 5)
         elif y_pred == 0:
-            pro_cyclic_weight = 0.50
-            anti_cyclic_weight = 0.50
+            selected_assets = sample(pro_cyclics.tolist(), 10) + sample(anti_cyclics.tolist(), 10)
         elif y_pred == -1:
-            pro_cyclic_weight = 0.25
-            anti_cyclic_weight = 0.75
-        else:
-            raise ValueError("Invalid predicted value for y. Must be -1, 0, or 1.")
+            selected_assets = sample(pro_cyclics.tolist(), 5) + sample(anti_cyclics.tolist(), 15)
 
-        portfolio = {}
-        if not pro_cyclics.empty:
-            pro_cyclic_assets = pro_cyclics['Ticker'].tolist()
-            pro_cyclic_allocation = pro_cyclic_weight / len(pro_cyclic_assets)
-            for asset in pro_cyclic_assets:
-                portfolio[f"{asset}_AC"] = min(0.20, pro_cyclic_allocation)
+        # Add the _AC suffix to selected assets
+        selected_assets = [asset + '_AC' for asset in selected_assets]
+        available_assets = [asset for asset in selected_assets if asset in self.adj_close_data.columns]
 
-        if not anti_cyclics.empty:
-            anti_cyclic_assets = anti_cyclics['Ticker'].tolist()
-            anti_cyclic_allocation = anti_cyclic_weight / len(anti_cyclic_assets)
-            for asset in anti_cyclic_assets:
-                portfolio[f"{asset}_AC"] = min(0.20, anti_cyclic_allocation)
+        return available_assets
 
-        return portfolio
-
-    # ------------------------------
-
-    def calculate_portfolio_returns(self, portfolio, date_range, target_return=0.02):
+    def optimize_sharpe_ratio(self, returns):
         """
-        Calculates portfolio returns for a given date range based on historical prices, with optimized weights
-        to maximize the Omega Ratio.
-
-        Args:
-            portfolio (dict): Initial portfolio with asset tickers.
-            date_range (list): List of dates over which to calculate the portfolio returns.
-            target_return (float): Target return threshold for Omega Ratio optimization (default is 0.02).
-
-        Returns:
-            pd.Series: Series of portfolio returns for the given date range.
+        Optimizes asset weights to maximize the Sharpe Ratio.
         """
-        # Load historical prices and filter by the date range
-        historical_prices = self.load_historical_prices(self.excel_file_path)
-        historical_prices = historical_prices.loc[date_range]  # Filter the price data by date range
-        
-        # Extract the tickers and ensure they exist in the historical data
-        portfolio_tickers = [f"{ticker}_AC" for ticker in portfolio.keys()]
-        valid_tickers = [ticker for ticker in portfolio_tickers if ticker in historical_prices.columns]
-        historical_prices = historical_prices[valid_tickers]  # Keep only valid tickers
-        
-        # Calculate daily returns for the valid tickers
-        daily_returns = historical_prices.pct_change().dropna()
+        def sharpe_ratio(weights):
+            portfolio_return = np.sum(returns.mean() * weights)
+            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(returns.cov(), weights)))
+            return -portfolio_return / portfolio_volatility
 
-        # Define a function to calculate the Omega Ratio, which will serve as the objective function
-        def omega_ratio_objective(weights, returns, target_return):
-            """
-            Objective function to minimize (negative Omega Ratio).
-
-            Args:
-                weights (np.array): Portfolio weights to optimize.
-                returns (pd.DataFrame): Historical returns of the assets in the portfolio.
-                target_return (float): Target return threshold for Omega Ratio.
-
-            Returns:
-                float: Negative of the Omega Ratio (since we're minimizing).
-            """
-            portfolio_returns = np.dot(returns, weights)  # Calculate portfolio returns
-            excess_returns = portfolio_returns - target_return
-
-            # Calculate gains and losses
-            gains = excess_returns[excess_returns > 0].sum()
-            losses = -excess_returns[excess_returns < 0].sum()
-
-            # Avoid division by zero: if losses are zero, Omega is infinite (return a large negative value)
-            if losses == 0:
-                return -np.inf if gains > 0 else np.nan
-
-            omega_ratio = gains / losses
-            return -omega_ratio  # Return negative Omega Ratio for minimization
-
-        # Initial guess for weights (equal weights for all assets)
-        num_assets = len(valid_tickers)
-        initial_weights = np.ones(num_assets) / num_assets
-
-        # Set constraints: Weights must sum to 1
+        num_assets = len(returns.columns)
+        initial_guess = num_assets * [1.0 / num_assets]
+        bounds = tuple((0, 1) for _ in range(num_assets))
         constraints = {'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}
 
-        # Set bounds for weights: All weights must be between 0 and 1
-        bounds = [(0, 1) for _ in range(num_assets)]
-
-        # Optimize the portfolio weights to maximize the Omega Ratio
-        result = minimize(omega_ratio_objective, initial_weights, args=(daily_returns, target_return),
-                        method='SLSQP', bounds=bounds, constraints=constraints)
-
-        # Get the optimized weights
-        if result.success:
-            optimized_weights = result.x
-        else:
-            raise ValueError("Omega Ratio optimization failed.")
-
-        # Calculate the optimized portfolio returns
-        portfolio_returns = np.dot(daily_returns, optimized_weights)
-        
-        # Return the portfolio returns as a pandas Series, indexed by date
-        return pd.Series(portfolio_returns, index=daily_returns.index)
-
-    # ------------------------------
-
-    def load_historical_prices(self, file_path):
-        """
-        Loads historical prices from an Excel file and ensures that the Date column is set as the index.
-
-        Args:
-            file_path (str): Path to the Excel file containing historical prices.
-
-        Returns:
-            pd.DataFrame: DataFrame with historical prices indexed by Date.
-        """
-        try:
-            historical_prices = pd.read_excel(file_path, sheet_name='adj_close')
-            historical_prices.set_index('Date', inplace=True)  # Ensure Date is the index
-            return historical_prices.dropna()  # Optional: Drop rows with NaN
-        except Exception as e:
-            print(f"Error loading historical prices: {e}")
-            return None
-        
-    # ------------------------------    
-
-    def calculate_omega_ratio(self, portfolio_returns, target_return=0.20):
-        """
-        Calculates the Omega Ratio for the created portfolio.
-
-        Args:
-            portfolio_returns (pd.Series): The returns of the portfolio.
-            target_return (float): Target return for calculating excess returns.
-
-        Returns:
-            float: Omega Ratio of the portfolio, or np.nan if invalid.
-        """
-        excess_returns = portfolio_returns - target_return
-
-        gains = excess_returns[excess_returns > 0].sum()
-        losses = -excess_returns[excess_returns < 0].sum()
-
-        if losses == 0:
-            if gains > 0:
-                return np.inf  # Infinite Omega Ratio when there are no losses
-            else:
-                return np.nan  # Undefined Omega Ratio if both gains and losses are zero or negative
-
-        omega_ratio = gains / losses
-        return omega_ratio
+        optimized_result = minimize(sharpe_ratio, initial_guess, bounds=bounds, constraints=constraints)
+        return optimized_result.x if optimized_result.success else initial_guess
 
 # --------------------------------------------------
 
-class DynamicBacktestingWithOmega:
+class DynamicBacktesting:
     def __init__(self, initial_capital, portfolio_manager, com=0.001):
         """
         Initializes the dynamic backtesting class.
-        
-        Args:
-            initial_capital (float): The initial capital for backtesting.
-            portfolio_manager (PortfolioManager): An instance of the PortfolioManager class to manage the portfolio.
-            com (float): Transaction commission (e.g., 0.001 for 0.1%).
         """
         self.initial_capital = initial_capital
         self.portfolio_manager = portfolio_manager
         self.com = com
-        self.portfolio_value = []  # Portfolio values over time
-        self.positions = {}  # Current positions in the portfolio
-        self.cash = initial_capital  # Available cash for transactions
+        self.portfolio_value = []
+        self.cash = initial_capital
+        self.positions = {}
 
-    def adjust_portfolio(self, trend_signal):
+    def run_backtest(self):
         """
-        Adjusts the portfolio weights based on the trend signal (y), with random selection of assets from 
-        pro-cyclical, anti-cyclical, and neutral categories.
-
-        Args:
-            trend_signal (int): The trend signal predicted by the model (-1, 0, 1).
+        Runs the backtesting cycle.
         """
-        # Get pro-cyclical and anti-cyclical assets
-        pro_cyclics, anti_cyclics = self.portfolio_manager.classify_assets()
-
-        # Define weight allocation based on the trend signal
-        if trend_signal == 1:  # Bullish signal (favors pro-cyclical)
-            pro_cyclic_weight = 0.75
-            anti_cyclic_weight = 0.25
-        elif trend_signal == 0:  # Neutral signal (balanced between pro- and anti-cyclical)
-            pro_cyclic_weight = 0.50
-            anti_cyclic_weight = 0.50
-        elif trend_signal == -1:  # Bearish signal (favors anti-cyclical)
-            pro_cyclic_weight = 0.25
-            anti_cyclic_weight = 0.75
-        else:
-            raise ValueError("Invalid trend signal: must be -1, 0, or 1.")
-
-        # Randomly select a subset of assets from pro-cyclical and anti-cyclical groups
-        num_pro_cyclic_assets = len(pro_cyclics)
-        num_anti_cyclic_assets = len(anti_cyclics)
-
-        # Select a random sample of pro-cyclical assets
-        if num_pro_cyclic_assets > 0:
-            selected_pro_cyclic_assets = pro_cyclics.sample(frac=0.5)  # Select 50% of pro-cyclical assets randomly
-            pro_cyclic_allocation = pro_cyclic_weight / len(selected_pro_cyclic_assets)
-        else:
-            selected_pro_cyclic_assets = pd.DataFrame()  # Empty DataFrame if no pro-cyclical assets exist
-            pro_cyclic_allocation = 0
-
-        # Select a random sample of anti-cyclical assets
-        if num_anti_cyclic_assets > 0:
-            selected_anti_cyclic_assets = anti_cyclics.sample(frac=0.5)  # Select 50% of anti-cyclical assets randomly
-            anti_cyclic_allocation = anti_cyclic_weight / len(selected_anti_cyclic_assets)
-        else:
-            selected_anti_cyclic_assets = pd.DataFrame()  # Empty DataFrame if no anti-cyclical assets exist
-            anti_cyclic_allocation = 0
-
-        # Build the portfolio with selected assets and their corresponding weights
-        portfolio = {}
-
-        # Add selected pro-cyclical assets to the portfolio
-        for asset in selected_pro_cyclic_assets['Ticker']:
-            portfolio[f"{asset}_AC"] = min(0.20, pro_cyclic_allocation)
-
-        # Add selected anti-cyclical assets to the portfolio
-        for asset in selected_anti_cyclic_assets['Ticker']:
-            portfolio[f"{asset}_AC"] = min(0.20, anti_cyclic_allocation)
-
-        # Assign the portfolio to positions
-        self.positions = portfolio
-        print(f"Adjusted Portfolio: {self.positions}")  # Debugging: View the adjusted portfolio
-
-    def calculate_portfolio_value(self, price_data, date):
-        """
-        Calculates the total portfolio value for a given date.
-
-        Args:
-            price_data (pd.DataFrame): DataFrame with historical prices.
-            date (str or pd.Timestamp): The date for which to calculate the portfolio value.
-        """
-        total_value = 0
-        valid_positions = {}
-
-        # Filter only tickers that have valid prices (no NaN) on the current date
-        for ticker, weight in self.positions.items():
-            if ticker not in price_data.columns:
-                print(f"Ticker {ticker} not found in price data, will be excluded.")  # Debugging
-                continue  # Skip tickers that don't exist in the data
-
-            if pd.notna(price_data.loc[date, ticker]):
-                valid_positions[ticker] = weight
-            else:
-                print(f"Ticker {ticker} has no data for {date}, it will be excluded.")  # Debugging
-
-        if valid_positions:
-            # Recalculate the weights to ensure they sum to 100%
-            total_weight = sum(valid_positions.values())
-            for ticker, weight in valid_positions.items():
-                # Normalize the weight with respect to total valid weight
-                price = price_data.loc[date, ticker]
-                total_value += (weight / total_weight) * price * (1 - self.com)  # Apply transaction commission
-                print(f"Ticker: {ticker}, Adjusted Weight: {weight / total_weight}, Price: {price}")  # Debugging
-
-        # Ensure that the portfolio value is updated
-        if total_value > 0:
-            self.portfolio_value.append(total_value)
-            print(f"Total portfolio value on {date}: {total_value}")  # Debugging
-        else:
-            if self.portfolio_value:
-                self.portfolio_value.append(self.portfolio_value[-1])
-            else:
-                self.portfolio_value.append(self.cash)
-            print(f"No valid portfolio value on {date}, maintaining previous value.")  # Debugging
-
-    def run_simulations(self, valid_tickers, assets_adj_close_data, model_data, sp500_data, num_simulations=2000):
-        """
-        Run multiple simulations using different sets of selected assets.
-
-        Args:
-            valid_tickers (list): List of valid tickers to choose from.
-            assets_adj_close_data (pd.DataFrame): Historical price data for assets.
-            model_data (pd.DataFrame): Data with model predictions.
-            sp500_data (pd.Series): S&P 500 data.
-            num_simulations (int): Number of simulations to run (default: 2000).
-            
-        Returns:
-            history (list): List containing portfolio values for each simulation.
-        """
-        history = []
-
-        for sim in range(num_simulations):
-            try:
-                # Randomly choose 10 assets from the valid tickers list
-                selected_tickers = np.random.choice(valid_tickers, 10, replace=False)
-                
-                # Run backtesting with selected tickers
-                portfolio_values = self.run_backtest(assets_adj_close_data[selected_tickers], model_data)
-                
-                # Ensure the portfolio values align with the S&P 500 dates
-                portfolio_values_series = pd.Series(portfolio_values, index=model_data.index)  # Ensure it aligns with model dates
-                
-                # Append the simulation result to history
-                history.append(portfolio_values_series)
-            except Exception as e:
-                print(f"Simulation {sim+1} failed due to: {e}")
-                continue
+        dates = self.portfolio_manager.model_data.index
+        initial_prices = self.portfolio_manager.adj_close_data.loc[dates[0]]
+        y_trend = self.portfolio_manager.model_data.loc[dates[0], 'Y']
+        selected_assets = self.portfolio_manager.create_portfolio(y_trend)
         
-        return history
-    
-    def run_backtest(self, price_data, model_data):
-        """
-        Runs the backtesting cycle, adjusting the portfolio based on the model's signal and calculating returns.
-        Filters tickers that don't have valid price data.
-        
-        Args:
-            price_data (pd.DataFrame): Historical price data indexed by date.
-            model_data (pd.DataFrame): DataFrame with model predictions, including trend signal (y).
-        
-        Returns:
-            list: Portfolio values over time.
-        """
-        def filter_valid_tickers(price_data, tickers):
-            """
-            Filters tickers that exist in the price data.
+        for i in range(12, len(dates), 12):
+            rebalance_date = dates[i]
+            y_trend = self.portfolio_manager.model_data.loc[rebalance_date, 'Y']
+            current_prices = self.portfolio_manager.adj_close_data.loc[rebalance_date, selected_assets]
             
-            Args:
-                price_data (pd.DataFrame): DataFrame containing historical price data.
-                tickers (list): List of tickers to check against the price data.
-                
-            Returns:
-                list: A list of valid tickers that are found in the price data.
-            """
-            # Ensure the tickers in the list have the correct "_AC" suffix
-            tickers_with_ac = [ticker + '_AC' if not ticker.endswith('_AC') else ticker for ticker in tickers]
+            returns = self.portfolio_manager.adj_close_data[selected_assets].iloc[i-12:i].pct_change().dropna()
+            optimal_weights = self.portfolio_manager.optimize_sharpe_ratio(returns)
             
-            # Find tickers that exist in the price data
-            valid_tickers = [ticker for ticker in tickers_with_ac if ticker in price_data.columns]
-            
-            if not valid_tickers:
-                raise ValueError("No valid tickers found in the price data.")
-            
-            return valid_tickers
-        
-        all_tickers = [ticker for ticker in self.portfolio_manager.assets_data['Ticker']]
-        valid_tickers = filter_valid_tickers(price_data, all_tickers)
-        
-        # Ensure the price data is aligned with valid tickers only
-        price_data = price_data[valid_tickers]
-        
-        for i, row in model_data.iterrows():
-            date = row.name  # Access the date from the index, not as a column
-            trend_signal = row['Y']  # Trend signal from the model (-1, 0, 1)
-            
-            # Adjust the portfolio based on the model's trend signal (y)
-            print(f"\nDate: {date}, Trend Signal: {trend_signal}")  # Debugging
-            self.adjust_portfolio(trend_signal)
-            
-            # Calculate the portfolio value for the current date
-            if date in price_data.index:
-                self.calculate_portfolio_value(price_data, date)
-        
-        return self.portfolio_value
+            portfolio_value = self.calculate_portfolio_value(optimal_weights, current_prices)
+            self.portfolio_value.append(portfolio_value)
+            print(f"Date: {rebalance_date}, Portfolio Value: {portfolio_value}")
 
-    def simulate_portfolios(self, price_data, model_data, num_simulations=2000):
+    def calculate_portfolio_value(self, weights, current_prices):
         """
-        Runs multiple portfolio simulations, storing the history of each simulation.
-
-        Args:
-            price_data (pd.DataFrame): Historical price data.
-            model_data (pd.DataFrame): Model predictions with trend signals.
-            num_simulations (int): Number of simulations to run.
-
-        Returns:
-            list: List containing the historical portfolio values for each simulation.
+        Calculates the portfolio value given the weights and current prices.
         """
-        history = []
+        investment = self.cash * weights
+        portfolio_value = (investment * current_prices).sum() * (1 - self.com)
+        return portfolio_value
 
-        for sim in range(num_simulations):
-            print(f"\nRunning simulation {sim + 1}/{num_simulations}")
-
-            # Reset the portfolio value for each simulation
-            self.portfolio_value = []
-
-            # Select random assets and run backtest
-            temp = np.random.choice(price_data.columns, 10)  # Randomly choose 10 tickers
-            selected_price_data = price_data[temp]  # Use only selected tickers for this simulation
-
-            # Run backtest with selected tickers
-            portfolio_values = self.run_backtest(selected_price_data, model_data)
-
-            # Append portfolio values to history
-            history.append(portfolio_values)
-
-        return history
-    
-    def calculate_performance_metrics(self, history):
-        """
-        Calculate performance metrics such as average final return and average Omega ratio for all simulations.
-
-        Args:
-            history (list of pd.Series): List containing portfolio values for each simulation.
-
-        Returns:
-            dict: Performance metrics including average final return and average Omega ratio.
-        """
-        final_returns = []
-        omega_ratios = []
-
-        for simulation in history:
-            # Calculate final return as a percentage
-            final_return = (simulation.iloc[-1] - simulation.iloc[0]) / simulation.iloc[0] * 100
-            final_returns.append(final_return)
-            
-            # Calculate daily returns for Omega Ratio
-            daily_returns = simulation.pct_change().dropna()
-            
-            # Calculate Omega ratio for the portfolio
-            omega_ratio = self.portfolio_manager.calculate_omega_ratio(daily_returns, target_return=0.02)
-            omega_ratios.append(omega_ratio)
-
-        # Calculate average metrics
-        avg_final_return = np.mean(final_returns)
-        avg_omega_ratio = np.mean(omega_ratios)
-
-        return {
-            "Average Final Return (%)": avg_final_return,
-            "Average Omega Ratio": avg_omega_ratio
-        }
-
-
-    def plot_performance(self, sp500_data, dates):
-        """
-        Plots the portfolio returns versus the S&P 500 benchmark returns, with final returns and Omega Ratio in the title.
-
-        Args:
-            sp500_data (pd.Series): The S&P 500 index values as a pandas Series.
-            dates (list): List of dates corresponding to the portfolio values.
-        """
-        # Ensure that the number of dates matches the portfolio values
-        if len(dates) != len(self.portfolio_value):
-            print(f"Warning: Number of dates ({len(dates)}) and portfolio values ({len(self.portfolio_value)}) do not match.")
-            dates = dates[:len(self.portfolio_value)]  # Align the dates with the portfolio values
-
-        # Calculate returns for the portfolio
-        portfolio_returns = pd.Series(self.portfolio_value, index=dates).pct_change().fillna(0)  # Daily returns of the portfolio
-        cumulative_portfolio_returns = (1 + portfolio_returns).cumprod() - 1  # Cumulative returns
-
-        # Calculate returns for the S&P 500 as a pandas Series
-        sp500_returns = sp500_data.pct_change().fillna(0)  # Daily returns of the S&P 500
-        cumulative_sp500_returns = (1 + sp500_returns[:len(self.portfolio_value)]).cumprod() - 1  # Cumulative returns
-
-        # Calculate final returns for the portfolio and S&P 500 in percentage
-        portfolio_return_percentage = cumulative_portfolio_returns.iloc[-1] * 100
-        sp500_return_percentage = cumulative_sp500_returns.iloc[-1] * 100
-
-        # Calculate Omega Ratio for the portfolio
-        omega_ratio_portfolio = self.portfolio_manager.calculate_omega_ratio(portfolio_returns, target_return=0.02)
-
-        # Plot the performance
-        plt.figure(figsize=(10, 6))
-
-        # Plot the cumulative returns of the portfolio
-        plt.plot(dates, cumulative_portfolio_returns, label='Dynamic Portfolio', color='blue')
-
-        # Plot the cumulative returns of the S&P 500 (benchmark)
-        plt.plot(dates, cumulative_sp500_returns, label='S&P 500 (Benchmark)', color='green')
-
-        # Add title with final returns and Omega Ratio
-        plt.title(f"Final Returns: Portfolio {portfolio_return_percentage:.2f}% vs S&P 500 {sp500_return_percentage:.2f}% | Omega Ratio: {omega_ratio_portfolio:.2f}")
-        plt.xlabel('Date')
-        plt.ylabel('Cumulative Returns (%)')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-    def plot_simulation_performance(self, history, sp500_data):
-        """
-        Plots the average portfolio performance across all simulations and compares it with the S&P 500.
-        
-        Args:
-            history (list of lists): List containing portfolio values for each simulation.
-            sp500_data (pd.Series): The S&P 500 index values as a pandas Series.
-        """
-        # Convert history (list of lists) into a DataFrame for easier manipulation
-        simulations_df = pd.DataFrame(history)
-
-        # Ensure we have matching dates and values for all simulations
-        if len(simulations_df) != len(sp500_data):
-            print(f"Warning: Number of dates ({len(simulations_df)}) and S&P 500 values ({len(sp500_data)}) do not match.")
-            min_length = min(len(simulations_df), len(sp500_data))
-            simulations_df = simulations_df.iloc[:min_length]
-            sp500_data = sp500_data.iloc[:min_length]
-
-        # Calculate the average performance across all simulations
-        avg_portfolio_performance = simulations_df.mean(axis=1)
-
-        # Calculate the cumulative returns for the average portfolio performance
-        avg_portfolio_returns = avg_portfolio_performance.pct_change().fillna(0)
-        cumulative_avg_portfolio_returns = (1 + avg_portfolio_returns).cumprod() - 1
-
-        # Calcular los rendimientos acumulados solo una vez para el S&P 500
-        sp500_returns = sp500_data.pct_change().fillna(0)
-        cumulative_sp500_returns = (1 + sp500_returns).cumprod() - 1
-
-        # Ensure the lengths of the data match
-        min_length = min(len(cumulative_avg_portfolio_returns), len(cumulative_sp500_returns))
-        cumulative_avg_portfolio_returns = cumulative_avg_portfolio_returns[:min_length]
-        cumulative_sp500_returns = cumulative_sp500_returns[:min_length]
-        aligned_dates = sp500_data.index[:min_length]
-
-        # Plot the performance
-        plt.figure(figsize=(10, 6))
-
-        # Plot the cumulative returns of the average portfolio performance
-        plt.plot(aligned_dates, cumulative_avg_portfolio_returns, label='Average Portfolio Performance (Simulations)', color='blue')
-
-        # Plot the cumulative returns of the S&P 500
-        plt.plot(aligned_dates, cumulative_sp500_returns, label='S&P 500 (Benchmark)', color='green')
-
-        # Add title, labels, and grid
-        plt.title("Average Portfolio Performance (Simulations) vs S&P 500")
-        plt.xlabel('Date')
-        plt.ylabel('Cumulative Returns (%)')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-
-    def calculate_omega_ratio(self, portfolio_returns, target_return=0.20):
-        """
-        Calculates the Omega Ratio for the created portfolio.
-
-        Args:
-            portfolio_returns (pd.Series): The returns of the portfolio.
-            target_return (float): Target return for calculating excess returns.
-
-        Returns:
-            float: Omega Ratio of the portfolio, or np.nan if invalid.
-        """
-        excess_returns = portfolio_returns - target_return
-
-        gains = excess_returns[excess_returns > 0].sum()
-        losses = -excess_returns[excess_returns < 0].sum()
-
-        if losses == 0:
-            if gains > 0:
-                return np.inf  # Infinite Omega Ratio when there are no losses
-            else:
-                return np.nan  # Undefined Omega Ratio if both gains and losses are zero or negative
-
-        omega_ratio = gains / losses
-        return omega_ratio
 # --------------------------------------------------
 
 
