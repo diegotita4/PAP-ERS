@@ -174,7 +174,7 @@ performance_df = pd.DataFrame({
     'Initial Value': initial_values,
     'Final Value': final_values
 })
-performance_df['Return'] = (performance_df['Final Value'] - performance_df['Initial Value']) / performance_df['Initial Value']
+performance_df['Return'] = (performance_df['Final Value'] / performance_df['Initial Value']) - 1
 
 # Parameters for calculating metrics
 risk_free_rate = 0.1050  # Annual risk-free rate
@@ -251,12 +251,14 @@ print(f"\nBest Scenario (Simulation {best_scenario}):")
 print(f"  - Sharpe Ratio: {(performance_df.loc[best_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
 print(f"  - Return: {performance_df.loc[best_scenario, 'Return'] * 100:.2f}%")
+print(f"  - Final Value: {performance_df.loc[best_scenario, 'Final Value']:.2f}")
 print(f"  - Jensen's Alpha (best scenario): {alpha_jensen_best:.2f}")
 
 print(f"\nWorst Scenario (Simulation {worst_scenario}):")
 print(f"  - Sharpe Ratio: {(performance_df.loc[worst_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
 print(f"  - Return: {performance_df.loc[worst_scenario, 'Return'] * 100:.2f}%")
+print(f"  - Final Value: {performance_df.loc[worst_scenario, 'Final Value']:.2f}")
 print(f"  - Jensen's Alpha (worst scenario): {alpha_jensen_worst:.2f}")
 
 print("\nAverage and Median Final Values for all portfolios:")
