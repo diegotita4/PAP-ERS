@@ -199,25 +199,27 @@ sp500_data['Date'] = pd.to_datetime(sp500_data['Date'])
 sp500_data.set_index('Date', inplace=True)
 sp500_data['Return'] = sp500_data['^GSPC_AC'].pct_change()
 
-# Calculate average return and beta of the portfolio with respect to S&P 500
+# Calculate average return, final return, and beta of the portfolio with respect to S&P 500
 mean_return_sp500 = sp500_data['Return'].mean() * 252  # Annualized return
+final_return_sp500 = (sp500_data['^GSPC_AC'].iloc[-1] - sp500_data['^GSPC_AC'].iloc[0]) / sp500_data['^GSPC_AC'].iloc[0]
+std_dev_return_sp500 = sp500_data['Return'].std() * (252 ** 0.5)  # Annualized standard deviation
 covariance = performance_df['Return'].cov(sp500_data['Return'])
 variance_sp500 = sp500_data['Return'].var()
 beta_portfolio = covariance / variance_sp500
 
-# Calculate Jensen's Alpha for the portfolio
+# Calculate Jensen's Alpha for the portfolio (general and specific scenarios)
 alpha_jensen_portfolio = mean_return - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
+alpha_jensen_best = performance_df.loc[best_scenario, 'Return'] - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
+alpha_jensen_worst = performance_df.loc[worst_scenario, 'Return'] - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
+
+# Calculate the Sharpe Ratio for S&P 500
+sharpe_ratio_sp500 = (mean_return_sp500 - risk_free_rate) / std_dev_return_sp500 if std_dev_return_sp500 != 0 else float('nan')
 
 # ------------------------------
 # 3. Calculate the Omega Ratio for the portfolio
 excess_returns_portfolio = performance_df['Return'] - target_return
 omega_ratio_portfolio = (excess_returns_portfolio[excess_returns_portfolio > 0].sum() /
                          abs(excess_returns_portfolio[excess_returns_portfolio < 0].sum())) if excess_returns_portfolio[excess_returns_portfolio < 0].sum() != 0 else float('inf')
-
-# ------------------------------
-# 4. Calculate the Sharpe and Omega Ratio for S&P 500
-std_dev_return_sp500 = sp500_data['Return'].std() * (252 ** 0.5)  # Annualized standard deviation
-sharpe_ratio_sp500 = (mean_return_sp500 - risk_free_rate) / std_dev_return_sp500 if std_dev_return_sp500 != 0 else float('nan')
 
 # Calculate the Omega Ratio for S&P 500
 excess_returns_sp500 = sp500_data['Return'] - (target_return / 252)  # Daily adjustment for annual target
@@ -234,6 +236,7 @@ median_final_value = performance_df['Final Value'].median()
 print("Performance Metrics:")
 
 print("\nMetrics for S&P 500:")
+print(f"  - Final Return: {final_return_sp500 * 100:.2f}%")
 print(f"  - Sharpe Ratio: {sharpe_ratio_sp500:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_sp500:.2f}")
 print(f"  - Jensen's Alpha: 0 (as the benchmark)")
@@ -241,16 +244,20 @@ print(f"  - Jensen's Alpha: 0 (as the benchmark)")
 print("\nGeneral Metrics for Portfolio (all simulations):")
 print(f"  - Sharpe Ratio: {sharpe_ratio_portfolio:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
+print(f"  - Average Return: {mean_return * 100:.2f}%")
+print(f"  - Jensen's Alpha (general): {alpha_jensen_portfolio:.2f}")
 
 print(f"\nBest Scenario (Simulation {best_scenario}):")
 print(f"  - Sharpe Ratio: {(performance_df.loc[best_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
 print(f"  - Return: {performance_df.loc[best_scenario, 'Return'] * 100:.2f}%")
+print(f"  - Jensen's Alpha (best scenario): {alpha_jensen_best:.2f}")
 
 print(f"\nWorst Scenario (Simulation {worst_scenario}):")
 print(f"  - Sharpe Ratio: {(performance_df.loc[worst_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
 print(f"  - Return: {performance_df.loc[worst_scenario, 'Return'] * 100:.2f}%")
+print(f"  - Jensen's Alpha (worst scenario): {alpha_jensen_worst:.2f}")
 
 print("\nAverage and Median Final Values for all portfolios:")
 print(f"  - Average Final Value: {average_final_value:.2f}")
