@@ -1294,7 +1294,7 @@ class DynamicBacktesting:
             })
             results_df.to_excel(filename, index=False)
             print(f"Results saved to {filename}")
-
+            
 # The new DynamicBacktesting class now incorporates all functionality from the notebook.
 
 

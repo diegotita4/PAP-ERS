@@ -142,57 +142,107 @@ model_data.set_index('Date', inplace=True)
 
 # Inicializa DynamicBacktesting
 # Función para ejecutar una simulación única
-# def run_single_backtest(i, data_handler):
+#def run_single_backtest(i, data_handler):
 #     portfolio = DBT.Portfolio(data_handler.beta_data, data_handler.adj_close)
 #     backtest = DBT.Backtest(data_handler.model_data, portfolio)
 #     backtest.run_backtest()
-#     return backtest.portfolio_value_history[0], backtest.portfolio_value_history[-1]
+#     return backtest.portfolio_value_history
 
 # Inicializar DataHandler una vez
-# data_handler = DBT.DataHandler("Data/assets_data.xlsx", "Data/model_data.xlsx")
-# data_handler.load_assets_data()
-# data_handler.load_model_data()
+#data_handler = DBT.DataHandler("Data/assets_data.xlsx", "Data/model_data.xlsx")
+#data_handler.load_assets_data()
+#data_handler.load_model_data()
 
 # Ejecutar las simulaciones en paralelo
-# results = Parallel(n_jobs=12)(delayed(run_single_backtest)(i, data_handler) for i in range(2000))
+#results = Parallel(n_jobs=12)(delayed(run_single_backtest)(i, data_handler) for i in range(2000))
 
 # Guardar resultados
-# results_df = pd.DataFrame(results, columns=['Valor Inicial', 'Valor Final'])
-# results_df.to_excel("backtest_results_summary.xlsx", index=False)
-# print("Resultados del backtesting guardados en 'backtest_results_summary.xlsx'")
+#results_df = pd.DataFrame(results)
+#results_df.to_excel("backtest_results_historicaldata.xlsx", index=False)
+#print("Resultados del backtesting guardados en 'backtest_results_historicaldata.xlsx'")
 
 
 # Checar metricas de las simulaciones: 
-# Cargar los datos de resultados del backtesting
-results_df = pd.read_excel("backtest_results.xlsx")
 
-# Calcular rendimientos para cada simulación
-results_df['Rendimiento'] = (results_df['Valor Final'] - results_df['Valor Inicial']) / results_df['Valor Inicial']
+# Load backtesting results data for the portfolio
+results_df = pd.read_excel("backtest_results_historicaldata.xlsx")
 
-# Parámetros para el cálculo de métricas
-risk_free_rate = 0.02  # Ejemplo de tasa libre de riesgo anual
-benchmark_return = 0.07  # Supuesto retorno del índice de referencia (S&P 500)
+# Calculate returns for each simulation
+initial_values = results_df.iloc[0]  # Initial values (first row)
+final_values = results_df.iloc[-1]   # Final values (last row)
+performance_df = pd.DataFrame({
+    'Initial Value': initial_values,
+    'Final Value': final_values
+})
+performance_df['Return'] = (performance_df['Final Value'] - performance_df['Initial Value']) / performance_df['Initial Value']
 
-# 1. Calcular el Ratio de Sharpe
-mean_return = results_df['Rendimiento'].mean()
-std_dev_return = results_df['Rendimiento'].std()
-sharpe_ratio = (mean_return - risk_free_rate) / std_dev_return
+# Parameters for calculating metrics
+risk_free_rate = 0.1050  # Annual risk-free rate
+target_return = 0.05     # Target return for Omega Ratio calculation
 
-# 2. Calcular el Omega Ratio
-# Umbral de retorno mínimo (puede ser la tasa libre de riesgo)
-threshold_return = risk_free_rate
-excess_returns = results_df['Rendimiento'] - threshold_return
+# ------------------------------
+# 1. Calculate Sharpe Ratio for the portfolio
+mean_return = performance_df['Return'].mean()
+std_dev_return = performance_df['Return'].std()
+sharpe_ratio_portfolio = (mean_return - risk_free_rate) / std_dev_return if std_dev_return != 0 else float('nan')
 
-# Omega ratio: suma de retornos por encima del umbral / suma de retornos por debajo del umbral
-omega_ratio = excess_returns[excess_returns > 0].sum() / abs(excess_returns[excess_returns < 0].sum())
+# Identify the best and worst scenarios based on final value
+best_scenario = performance_df['Final Value'].idxmax()
+worst_scenario = performance_df['Final Value'].idxmin()
 
-# 3. Calcular el Alpha de Jensen
-# Usamos el supuesto rendimiento de referencia (benchmark_return)
-# Retorno promedio del portafolio - [Tasa libre de riesgo + Beta * (Rendimiento del benchmark - Tasa libre de riesgo)]
-# Para simplificar, asumimos beta = 1 si el portafolio replica al mercado.
-jensen_alpha = mean_return - (risk_free_rate + 1 * (benchmark_return - risk_free_rate))
+# ------------------------------
+# 2. Calculate Jensen's Alpha and Omega Ratio for the portfolio
 
-# Resultados
-print(f"Ratio de Sharpe: {sharpe_ratio}")
-print(f"Omega Ratio: {omega_ratio}")
-print(f"Alpha de Jensen: {jensen_alpha}")
+# Load S&P 500 data for comparison and calculate Jensen's Alpha
+sp500_data = pd.read_excel("Data/sp500_data.xlsx")
+sp500_data['Date'] = pd.to_datetime(sp500_data['Date'])
+sp500_data.set_index('Date', inplace=True)
+sp500_data['Return'] = sp500_data['^GSPC_AC'].pct_change()
+
+# Calculate average return and beta of the portfolio with respect to S&P 500
+mean_return_sp500 = sp500_data['Return'].mean() * 252  # Annualized return
+covariance = performance_df['Return'].cov(sp500_data['Return'])
+variance_sp500 = sp500_data['Return'].var()
+beta_portfolio = covariance / variance_sp500
+
+# Calculate Jensen's Alpha for the portfolio
+alpha_jensen_portfolio = mean_return - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
+
+# ------------------------------
+# 3. Calculate the Omega Ratio for the portfolio
+excess_returns_portfolio = performance_df['Return'] - target_return
+omega_ratio_portfolio = (excess_returns_portfolio[excess_returns_portfolio > 0].sum() /
+                         abs(excess_returns_portfolio[excess_returns_portfolio < 0].sum())) if excess_returns_portfolio[excess_returns_portfolio < 0].sum() != 0 else float('inf')
+
+# ------------------------------
+# 4. Calculate the Sharpe and Omega Ratio for S&P 500
+std_dev_return_sp500 = sp500_data['Return'].std() * (252 ** 0.5)  # Annualized standard deviation
+sharpe_ratio_sp500 = (mean_return_sp500 - risk_free_rate) / std_dev_return_sp500 if std_dev_return_sp500 != 0 else float('nan')
+
+# Calculate the Omega Ratio for S&P 500
+excess_returns_sp500 = sp500_data['Return'] - (target_return / 252)  # Daily adjustment for annual target
+omega_ratio_sp500 = (excess_returns_sp500[excess_returns_sp500 > 0].sum() /
+                     abs(excess_returns_sp500[excess_returns_sp500 < 0].sum())) if excess_returns_sp500[excess_returns_sp500 < 0].sum() != 0 else float('inf')
+
+# ------------------------------
+# Display Results
+print("Performance Metrics:")
+
+print("\nMetrics for S&P 500:")
+print(f"  - Sharpe Ratio: {sharpe_ratio_sp500:.2f}")
+print(f"  - Omega Ratio: {omega_ratio_sp500:.2f}")
+print(f"  - Jensen's Alpha: 0 (as the benchmark)")
+
+print("\nGeneral Metrics for Portfolio (all simulations):")
+print(f"  - Sharpe Ratio: {sharpe_ratio_portfolio:.2f}")
+print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
+
+print(f"\nBest Scenario (Simulation {best_scenario}):")
+print(f"  - Sharpe Ratio: {(performance_df.loc[best_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
+print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
+print(f"  - Return: {performance_df.loc[best_scenario, 'Return'] * 100:.2f}%")
+
+print(f"\nWorst Scenario (Simulation {worst_scenario}):")
+print(f"  - Sharpe Ratio: {(performance_df.loc[worst_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
+print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
+print(f"  - Return: {performance_df.loc[worst_scenario, 'Return'] * 100:.2f}%")
