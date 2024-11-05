@@ -225,6 +225,11 @@ omega_ratio_sp500 = (excess_returns_sp500[excess_returns_sp500 > 0].sum() /
                      abs(excess_returns_sp500[excess_returns_sp500 < 0].sum())) if excess_returns_sp500[excess_returns_sp500 < 0].sum() != 0 else float('inf')
 
 # ------------------------------
+# Calculate average and median of all portfolio final values
+average_final_value = performance_df['Final Value'].mean()
+median_final_value = performance_df['Final Value'].median()
+
+# ------------------------------
 # Display Results
 print("Performance Metrics:")
 
@@ -246,3 +251,7 @@ print(f"\nWorst Scenario (Simulation {worst_scenario}):")
 print(f"  - Sharpe Ratio: {(performance_df.loc[worst_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
 print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
 print(f"  - Return: {performance_df.loc[worst_scenario, 'Return'] * 100:.2f}%")
+
+print("\nAverage and Median Final Values for all portfolios:")
+print(f"  - Average Final Value: {average_final_value:.2f}")
+print(f"  - Median Final Value: {median_final_value:.2f}")
