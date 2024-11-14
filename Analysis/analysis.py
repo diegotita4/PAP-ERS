@@ -1,4 +1,3 @@
-
 """
 # -- --------------------------------------------------------------------------------------------------- -- #
 # -- Project: Estrategias de Rotación Sectorial (ERS)                                                    -- #
@@ -163,104 +162,145 @@ model_data.set_index('Date', inplace=True)
 
 
 # Checar metricas de las simulaciones: 
-
-# Load backtesting results data for the portfolio
+# Cargar resultados de backtesting del portafolio
 results_df = pd.read_excel("backtest_results_historicaldata.xlsx")
 
-# Calculate returns for each simulation
-initial_values = results_df.iloc[0]  # Initial values (first row)
-final_values = results_df.iloc[-1]   # Final values (last row)
-performance_df = pd.DataFrame({
-    'Initial Value': initial_values,
-    'Final Value': final_values
-})
-performance_df['Return'] = (performance_df['Final Value'] / performance_df['Initial Value']) - 1
+def calculate_portfolio_metrics(row):
+    """Calcula métricas para una trayectoria individual del portafolio."""
+    # Filtrar valores no nulos y ceros
+    values = row[row != 0].dropna().values
+    
+    if len(values) < 2:
+        return None
+    
+    initial_value = values[0]
+    final_value = values[-1]
+    
+    # Verificar valores válidos
+    if initial_value <= 0 or final_value <= 0:
+        return None
+        
+    # Calcular retornos
+    total_return = (final_value / initial_value) - 1
+    num_periods = len(values) - 1
+    semi_annual_return = (1 + total_return) ** (1 / num_periods) - 1
+    
+    return {
+        'Initial_Value': initial_value,
+        'Final_Value': final_value,
+        'Total_Return': total_return,
+        'Semi_Annual_Return': semi_annual_return,
+        'Periods': num_periods
+    }
 
-# Parameters for calculating metrics
-risk_free_rate = 0.1050  # Annual risk-free rate
-target_return = 0.05     # Target return for Omega Ratio calculation
+# Procesar cada escenario
+scenarios = []
+for i, row in results_df.iterrows():
+    metrics = calculate_portfolio_metrics(row)
+    if metrics is not None:
+        metrics['Scenario'] = i
+        scenarios.append(metrics)
 
-# ------------------------------
-# 1. Calculate Sharpe Ratio for the portfolio
-mean_return = performance_df['Return'].mean()
-std_dev_return = performance_df['Return'].std()
-sharpe_ratio_portfolio = (mean_return - risk_free_rate) / std_dev_return if std_dev_return != 0 else float('nan')
+performance_df = pd.DataFrame(scenarios)
 
-# Identify the best and worst scenarios based on final value
-best_scenario = performance_df['Final Value'].idxmax()
-worst_scenario = performance_df['Final Value'].idxmin()
+# Remover outliers usando el método IQR
+def remove_outliers(df, column):
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
 
-# ------------------------------
-# 2. Calculate Jensen's Alpha and Omega Ratio for the portfolio
+# Limpiar outliers de retornos semestrales
+clean_performance_df = remove_outliers(performance_df, 'Semi_Annual_Return')
 
-# Load S&P 500 data for comparison and calculate Jensen's Alpha
+# Parámetros
+risk_free_rate = 0.1050
+target_return = 0.50
+
+# Calcular métricas con datos limpios
+mean_semi_annual_return = clean_performance_df['Semi_Annual_Return'].mean()
+median_semi_annual_return = clean_performance_df['Semi_Annual_Return'].median()
+std_semi_annual_return = clean_performance_df['Semi_Annual_Return'].std()
+
+# Sharpe Ratio (ajustado para frecuencia semestral)
+annualized_sharpe_ratio = (mean_semi_annual_return - risk_free_rate) / std_semi_annual_return * np.sqrt(2)
+
+# Cargar datos del S&P 500
 sp500_data = pd.read_excel("Data/sp500_data.xlsx")
 sp500_data['Date'] = pd.to_datetime(sp500_data['Date'])
 sp500_data.set_index('Date', inplace=True)
-sp500_data['Return'] = sp500_data['^GSPC_AC'].pct_change()
 
-# Calculate average return, final return, and beta of the portfolio with respect to S&P 500
-mean_return_sp500 = sp500_data['Return'].mean() * 252  # Annualized return
-final_return_sp500 = (sp500_data['^GSPC_AC'].iloc[-1] - sp500_data['^GSPC_AC'].iloc[0]) / sp500_data['^GSPC_AC'].iloc[0]
-std_dev_return_sp500 = sp500_data['Return'].std() * (252 ** 0.5)  # Annualized standard deviation
-covariance = performance_df['Return'].cov(sp500_data['Return'])
-variance_sp500 = sp500_data['Return'].var()
-beta_portfolio = covariance / variance_sp500
+# Calcular retorno anual del S&P 500
+first_sp500 = sp500_data['^GSPC_AC'].iloc[0]
+last_sp500 = sp500_data['^GSPC_AC'].iloc[-1]
+total_years = (sp500_data.index[-1] - sp500_data.index[0]).days / 365.25
+sp500_annual_return = ((last_sp500 / first_sp500) ** (1 / total_years)) - 1
+sp500_annual_std = sp500_data['^GSPC_AC'].pct_change().std() * (252 ** 0.5)
 
-# Calculate Jensen's Alpha for the portfolio (general and specific scenarios)
-alpha_jensen_portfolio = mean_return - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
-alpha_jensen_best = performance_df.loc[best_scenario, 'Return'] - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
-alpha_jensen_worst = performance_df.loc[worst_scenario, 'Return'] - (risk_free_rate + beta_portfolio * (mean_return_sp500 - risk_free_rate))
+# Calcular beta y alpha de Jensen (ajustado para frecuencia semestral)
+sp500_returns = sp500_data['^GSPC_AC'].pct_change().dropna()
+portfolio_returns = clean_performance_df['Semi_Annual_Return']
 
-# Calculate the Sharpe Ratio for S&P 500
-sharpe_ratio_sp500 = (mean_return_sp500 - risk_free_rate) / std_dev_return_sp500 if std_dev_return_sp500 != 0 else float('nan')
+# Modificar esta parte para manejar los índices correctamente
+if len(portfolio_returns) > 0 and len(sp500_returns) > 0:
+    # Convertir los retornos del portafolio a Series con índice numérico
+    portfolio_returns = pd.Series(portfolio_returns.values)
+    # Resamplear los retornos del S&P 500 a frecuencia semestral
+    semi_annual_sp500_returns = sp500_returns.resample('6ME').mean()
+    # Asegurar que tengamos la misma cantidad de datos
+    min_len = min(len(portfolio_returns), len(semi_annual_sp500_returns))
+    portfolio_returns = portfolio_returns[:min_len]
+    semi_annual_sp500_returns = semi_annual_sp500_returns[:min_len]
+    
+    beta_portfolio = portfolio_returns.cov(semi_annual_sp500_returns) / semi_annual_sp500_returns.var()
+    alpha_jensen_portfolio = mean_semi_annual_return - (risk_free_rate + beta_portfolio * (sp500_annual_return - risk_free_rate))
+else:
+    beta_portfolio = np.nan
+    alpha_jensen_portfolio = np.nan
 
-# ------------------------------
-# 3. Calculate the Omega Ratio for the portfolio
-excess_returns_portfolio = performance_df['Return'] - target_return
-omega_ratio_portfolio = (excess_returns_portfolio[excess_returns_portfolio > 0].sum() /
-                         abs(excess_returns_portfolio[excess_returns_portfolio < 0].sum())) if excess_returns_portfolio[excess_returns_portfolio < 0].sum() != 0 else float('inf')
+# Omega Ratio
+excess_returns = clean_performance_df['Semi_Annual_Return'] - target_return
+positive_returns = excess_returns[excess_returns > 0].sum()
+negative_returns = abs(excess_returns[excess_returns < 0].sum())
+omega_ratio = positive_returns / negative_returns if negative_returns != 0 else np.nan
 
-# Calculate the Omega Ratio for S&P 500
-excess_returns_sp500 = sp500_data['Return'] - (target_return / 252)  # Daily adjustment for annual target
-omega_ratio_sp500 = (excess_returns_sp500[excess_returns_sp500 > 0].sum() /
-                     abs(excess_returns_sp500[excess_returns_sp500 < 0].sum())) if excess_returns_sp500[excess_returns_sp500 < 0].sum() != 0 else float('inf')
-
-# ------------------------------
-# Calculate average and median of all portfolio final values
-average_final_value = performance_df['Final Value'].mean()
-median_final_value = performance_df['Final Value'].median()
-
-# ------------------------------
-# Display Results
-print("Performance Metrics:")
-
+# Mostrar resultados
 print("\nMetrics for S&P 500:")
-print(f"  - Final Return: {final_return_sp500 * 100:.2f}%")
-print(f"  - Sharpe Ratio: {sharpe_ratio_sp500:.2f}")
-print(f"  - Omega Ratio: {omega_ratio_sp500:.2f}")
-print(f"  - Jensen's Alpha: 0 (as the benchmark)")
+print(f"  - Annual Return: {sp500_annual_return * 100:.2f}%")
+print(f"  - Volatility: {sp500_annual_std * 100:.2f}%")
 
 print("\nGeneral Metrics for Portfolio (all simulations):")
-print(f"  - Sharpe Ratio: {sharpe_ratio_portfolio:.2f}")
-print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
-print(f"  - Average Return: {mean_return * 100:.2f}%")
-print(f"  - Jensen's Alpha (general): {alpha_jensen_portfolio:.2f}")
+print(f"  - Average Semi-Annual Return: {mean_semi_annual_return * 100:.2f}%")
+print(f"  - Median Semi-Annual Return: {median_semi_annual_return * 100:.2f}%")
+print(f"  - Volatility (Semi-Annual): {std_semi_annual_return * 100:.2f}%")
+print(f"  - Annualized Sharpe Ratio: {annualized_sharpe_ratio:.2f}")
+print(f"  - Beta: {beta_portfolio:.2f}")
+print(f"  - Jensen's Alpha: {alpha_jensen_portfolio:.4f}")
+print(f"  - Omega Ratio: {omega_ratio:.2f}")
 
-print(f"\nBest Scenario (Simulation {best_scenario}):")
-print(f"  - Sharpe Ratio: {(performance_df.loc[best_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
-print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
-print(f"  - Return: {performance_df.loc[best_scenario, 'Return'] * 100:.2f}%")
-print(f"  - Final Value: {performance_df.loc[best_scenario, 'Final Value']:.2f}")
-print(f"  - Jensen's Alpha (best scenario): {alpha_jensen_best:.2f}")
+# Estadísticas de valores finales (sin outliers), en millones
+clean_performance_df.loc[:, 'Final_Value_Millions'] = clean_performance_df['Final_Value'] / 1_000_000
+clean_final_values = remove_outliers(clean_performance_df, 'Final_Value_Millions')
+print("\nDistribution of Final Values (without outliers, in millions):")
+print(f"  - Average: {clean_final_values['Final_Value_Millions'].mean():,.2f} M")
+print(f"  - Median: {clean_final_values['Final_Value_Millions'].median():,.2f} M")
+print(f"  - Min: {clean_final_values['Final_Value_Millions'].min():,.2f} M")
+print(f"  - Max: {clean_final_values['Final_Value_Millions'].max():,.2f} M")
 
-print(f"\nWorst Scenario (Simulation {worst_scenario}):")
-print(f"  - Sharpe Ratio: {(performance_df.loc[worst_scenario, 'Return'] - risk_free_rate) / std_dev_return:.2f}")
-print(f"  - Omega Ratio: {omega_ratio_portfolio:.2f}")
-print(f"  - Return: {performance_df.loc[worst_scenario, 'Return'] * 100:.2f}%")
-print(f"  - Final Value: {performance_df.loc[worst_scenario, 'Final Value']:.2f}")
-print(f"  - Jensen's Alpha (worst scenario): {alpha_jensen_worst:.2f}")
+# Estadísticas adicionales
+print("\nPortfolio Statistics:")
+print(f"  - Number of valid scenarios: {len(clean_performance_df)}")
+print(f"  - Percentage of winning scenarios: {(clean_performance_df['Semi_Annual_Return'] > target_return).mean() * 100:.2f}%")
 
-print("\nAverage and Median Final Values for all portfolios:")
-print(f"  - Average Final Value: {average_final_value:.2f}")
-print(f"  - Median Final Value: {median_final_value:.2f}")
+# Obtener los 5 mejores y 5 peores escenarios basados en el rendimiento semestral
+top_5_scenarios = clean_performance_df.nlargest(5, 'Semi_Annual_Return')
+bottom_5_scenarios = clean_performance_df.nsmallest(5, 'Semi_Annual_Return')
+
+# Mostrar los mejores y peores escenarios
+print("\nTop 5 Best Scenarios:")
+print(top_5_scenarios[['Scenario', 'Initial_Value', 'Final_Value_Millions', 'Total_Return', 'Semi_Annual_Return', 'Periods']])
+
+print("\nBottom 5 Worst Scenarios:")
+print(bottom_5_scenarios[['Scenario', 'Initial_Value', 'Final_Value_Millions', 'Total_Return', 'Semi_Annual_Return', 'Periods']])
