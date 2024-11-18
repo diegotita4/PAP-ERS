@@ -304,3 +304,182 @@ print(top_5_scenarios[['Scenario', 'Initial_Value', 'Final_Value_Millions', 'Tot
 
 print("\nBottom 5 Worst Scenarios:")
 print(bottom_5_scenarios[['Scenario', 'Initial_Value', 'Final_Value_Millions', 'Total_Return', 'Semi_Annual_Return', 'Periods']])
+
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import seaborn as sns
+
+def plot_sp500_vs_predictions(sp500_data, predictions):
+    """
+    Grafica el comportamiento del S&P 500 junto con las predicciones del modelo.
+    
+    Args:
+        sp500_data (DataFrame): Datos históricos del S&P 500 con índice como fecha y columna ['^GSPC_AC'].
+        predictions (DataFrame): Predicciones del modelo con índice como fecha y columna ['Prediction'] (-1, 0, 1).
+    """
+    fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
+
+    # Graficar el SP500
+    axs[0].plot(sp500_data.index, sp500_data['^GSPC_AC'], color='blue', label='S&P 500')
+    axs[0].set_title("S&P 500 Historical Data")
+    axs[0].set_ylabel("S&P 500 Value")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Graficar las predicciones del modelo
+    axs[1].scatter(predictions.index, predictions['Prediction'], c=predictions['Prediction'], 
+                   cmap='coolwarm', label='Model Predictions')
+    axs[1].axhline(y=0, color='gray', linestyle='--', linewidth=0.8, label='Neutral Prediction (0)')
+    axs[1].set_title("Model Predictions")
+    axs[1].set_ylabel("Prediction (-1, 0, 1)")
+    axs[1].set_xlabel("Date")
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+# def plot_boxplot_with_benchmark(data, benchmark_mean):
+#     """
+#     Genera un boxplot para las simulaciones con una línea promedio del benchmark.
+
+#     Args:
+#         data (DataFrame): DataFrame con una columna 'Semi_Annual_Return' que contiene los rendimientos.
+#         benchmark_mean (float): Promedio del benchmark (por ejemplo, retorno medio del S&P 500).
+#     """
+#     plt.figure(figsize=(8, 6))
+#     sns.boxplot(x=data['Semi_Annual_Return'], color='skyblue', width=0.6)
+#     plt.axvline(x=benchmark_mean, color='red', linestyle='--', label=f'Benchmark Mean: {benchmark_mean:.2%}')
+#     plt.title("Boxplot of Semi-Annual Returns with Benchmark Mean")
+#     plt.xlabel("Semi-Annual Return")
+#     plt.legend()
+#     plt.grid(axis='x', linestyle='--', alpha=0.7)
+#     plt.tight_layout()
+#     plt.show()
+
+# Generar 'predictions' desde model_data
+predictions = model_data[['Y']].rename(columns={'Y': 'Prediction'})
+
+# Ejecutar las funciones de las gráficas
+plot_sp500_vs_predictions(sp500_data, predictions)
+# plot_boxplot_with_benchmark(clean_performance_df, sp500_annual_return)
+
+def plot_sp500_vs_predictions_adjusted(sp500_data, predictions):
+    """
+    Grafica el comportamiento del S&P 500 junto con las predicciones del modelo, incluyendo líneas horizontales para los ciclos.
+    
+    Args:
+        sp500_data (DataFrame): Datos históricos del S&P 500 con índice como fecha y columna ['^GSPC_AC'].
+        predictions (DataFrame): Predicciones del modelo con índice como fecha y columna ['Prediction'] (-1, 0, 1).
+    """
+    fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
+
+    # Graficar el SP500
+    axs[0].plot(sp500_data.index, sp500_data['^GSPC_AC'], color='blue', label='S&P 500')
+    axs[0].set_title("S&P 500 Historical Data")
+    axs[0].set_ylabel("S&P 500 Value")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Graficar las predicciones del modelo con líneas horizontales
+    axs[1].plot(predictions.index, predictions['Prediction'], color='black', label='Model Predictions', alpha=0.8)
+    axs[1].axhline(y=-1, color='blue', linestyle='--', linewidth=1, label='Bearish Cycle (-1)')
+    axs[1].axhline(y=0, color='gray', linestyle='--', linewidth=1, label='Neutral Cycle (0)')
+    axs[1].axhline(y=1, color='red', linestyle='--', linewidth=1, label='Bullish Cycle (1)')
+    axs[1].set_title("Model Predictions with Cycles")
+    axs[1].set_ylabel("Prediction (-1, 0, 1)")
+    axs[1].set_xlabel("Date")
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+plot_sp500_vs_predictions_adjusted(sp500_data, predictions)
+
+
+def classify_sp500(sp500_data, threshold=0.02):
+    """
+    Clasifica el rendimiento del S&P 500 en alto, neutral y bajo.
+    
+    Args:
+        sp500_data (DataFrame): Datos históricos del S&P 500 con índice como fecha y columna ['^GSPC_AC'].
+        threshold (float): Umbral para definir categorías (por ejemplo, 0.02 para 2%).
+        
+    Returns:
+        DataFrame: DataFrame original con una nueva columna ['SP500_Category'].
+    """
+    # Calcular rendimiento mensual
+    sp500_data['SP500_Return'] = sp500_data['^GSPC_AC'].pct_change()
+
+    # Clasificar en tres categorías
+    sp500_data['SP500_Category'] = sp500_data['SP500_Return'].apply(
+        lambda x: 1 if x > threshold else (-1 if x < -threshold else 0)
+    )
+    return sp500_data
+def merge_model_with_sp500(sp500_data, predictions):
+    """
+    Combina las predicciones del modelo con las categorías del S&P 500.
+    
+    Args:
+        sp500_data (DataFrame): Datos del S&P 500 con la columna ['SP500_Category'].
+        predictions (DataFrame): Predicciones del modelo con índice como fecha y columna ['Prediction'].
+        
+    Returns:
+        DataFrame: DataFrame combinado.
+    """
+    # Asegurarse de que los índices coincidan
+    combined_data = sp500_data[['SP500_Category']].merge(predictions, left_index=True, right_index=True, how='inner')
+    return combined_data
+
+def plot_predictions_vs_sp500(sp500_data, combined_data):
+    """
+    Grafica las predicciones del modelo junto con la clasificación del S&P 500.
+    
+    Args:
+        sp500_data (DataFrame): Datos del S&P 500 con rendimiento y clasificación.
+        combined_data (DataFrame): DataFrame combinado con predicciones y categorías.
+    """
+    fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True, gridspec_kw={'height_ratios': [1, 1]})
+
+    # # Graficar las predicciones del modelo
+    # axs[0].plot(combined_data.index, combined_data['Prediction'], color='black', label='Model Predictions', alpha=0.8)
+    # axs[0].axhline(y=-1, color='blue', linestyle='--', linewidth=1, label='Bearish Prediction (-1)')
+    # axs[0].axhline(y=0, color='gray', linestyle='--', linewidth=1, label='Neutral Prediction (0)')
+    # axs[0].axhline(y=1, color='red', linestyle='--', linewidth=1, label='Bullish Prediction (1)')
+    # axs[0].set_ylabel("Model Predictions (-1, 0, 1)")
+    # axs[0].legend()
+    # axs[0].grid(True)
+
+    # Graficar las predicciones del modelo
+    axs[0].scatter(predictions.index, predictions['Prediction'], c=predictions['Prediction'], 
+                   cmap='coolwarm', label='Model Predictions')
+    axs[0].axhline(y=0, color='gray', linestyle='--', linewidth=0.8, label='Neutral Prediction (0)')
+    axs[0].set_title("Model Predictions")
+    axs[0].set_ylabel("Prediction (-1, 0, 1)")
+    axs[0].set_xlabel("Date")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Graficar la clasificación del S&P 500
+    axs[1].scatter(combined_data.index, combined_data['SP500_Category'], c=combined_data['SP500_Category'], 
+                   cmap='coolwarm', label='S&P 500 Classification')
+    axs[1].axhline(y=-1, color='blue', linestyle='--', linewidth=1, label='Bajo (-1)')
+    axs[1].axhline(y=0, color='gray', linestyle='--', linewidth=1, label='Neutral (0)')
+    axs[1].axhline(y=1, color='red', linestyle='--', linewidth=1, label='Alto (1)')
+    axs[1].set_ylabel("SP500 Categories (-1, 0, 1)")
+    axs[1].set_xlabel("Date")
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+classify_sp500_data = classify_sp500(sp500_data)
+combined_data = merge_model_with_sp500(classify_sp500_data, predictions)
+plot_predictions_vs_sp500(sp500_data, combined_data)
+
+
